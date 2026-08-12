@@ -6,14 +6,18 @@
    bundler; these imports are the same SDK, same version.
 
    Layout in Firestore:
-     users/{uid}                  -> { currency, defaultIncome, incomes }
+     users/{uid}                  -> { currency, defaultIncome, incomes,
+                                       displayName, photo }
      users/{uid}/expenses/{id}    -> { date, amount, category, note, createdAt }
    ========================================================= */
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js';
 import {
-  getAuth, signInAnonymously, onAuthStateChanged,
-  GoogleAuthProvider, signInWithPopup, linkWithPopup, signOut
+  getAuth, onAuthStateChanged, signInAnonymously, signOut,
+  createUserWithEmailAndPassword, signInWithEmailAndPassword,
+  updateProfile, updatePassword, sendPasswordResetEmail,
+  EmailAuthProvider, GoogleAuthProvider,
+  linkWithCredential, linkWithPopup, signInWithPopup, reauthenticateWithCredential
 } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-auth.js';
 import {
   initializeFirestore, persistentLocalCache, persistentMultipleTabManager,
@@ -81,17 +85,33 @@ function subscribe() {
   }, reportError);
 }
 
+function unsubscribeAll() {
+  if (unsubSettings) { unsubSettings(); unsubSettings = null; }
+  if (unsubExpenses) { unsubExpenses(); unsubExpenses = null; }
+  seenSettings = seenExpenses = false;
+  latestSettings = latestExpenses = null;
+}
+
 /** Turns the setup mistakes everyone hits into instructions. */
 export function authErrorMessage(err) {
   switch (err.code) {
     case 'auth/configuration-not-found':
-      return 'Authentication is not set up yet — open the Firebase console → Authentication → Get started, then enable the Anonymous provider.';
+      return 'Authentication is not set up yet — open the Firebase console → Authentication → Get started, then enable the Email/Password and Anonymous providers.';
     case 'auth/operation-not-allowed':
-      return 'Anonymous sign-in is disabled — enable it under Firebase console → Authentication → Sign-in method.';
+      return 'That sign-in method is disabled — enable it under Firebase console → Authentication → Sign-in method.';
     case 'auth/unauthorized-domain':
       return `This domain (${location.hostname}) is not authorised — add it under Firebase console → Authentication → Settings → Authorized domains.`;
-    default:
-      return err.message;
+    case 'auth/invalid-email':          return 'That email address does not look right.';
+    case 'auth/email-already-in-use':   return 'An account already exists with that email. Try signing in instead.';
+    case 'auth/weak-password':          return 'Password is too weak — use at least 6 characters.';
+    case 'auth/invalid-credential':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':         return 'Email or password is incorrect.';
+    case 'auth/too-many-requests':      return 'Too many attempts. Wait a minute and try again.';
+    case 'auth/requires-recent-login':  return 'For security, sign out and back in before changing your password.';
+    case 'auth/popup-blocked':          return 'Your browser blocked the popup — allow popups for this site and retry.';
+    case 'auth/network-request-failed': return 'Network problem — check your connection and try again.';
+    default: return err.message;
   }
 }
 
@@ -102,28 +122,24 @@ function reportError(err) {
     // permission-denied almost always means the Firestore rules were never
     // updated from the default deny-all
     message: err.code === 'permission-denied'
-      ? 'Firestore rules are blocking access — see firestore.rules in the repo.'
-      : err.message,
+      ? 'Firestore rules are blocking access — publish the rules from firestore.rules in the repo.'
+      : authErrorMessage(err),
     user: auth.currentUser
   });
 }
 
-/* ---------------- public API ---------------- */
+/* ---------------- session ---------------- */
 
 export function initCloud(callbacks) {
   handlers = { ...handlers, ...callbacks };
   handlers.onStatus({ state: 'connecting', user: null });
 
   onAuthStateChanged(auth, (user) => {
-    if (unsubSettings) { unsubSettings(); unsubSettings = null; }
-    if (unsubExpenses) { unsubExpenses(); unsubExpenses = null; }
-    seenSettings = seenExpenses = false;
+    unsubscribeAll();
 
     if (!user) {
       uid = null;
-      signInAnonymously(auth).catch((err) => {
-        handlers.onStatus({ state: 'error', message: authErrorMessage(err), user: null });
-      });
+      handlers.onStatus({ state: 'signed-out', user: null });
       return;
     }
 
@@ -132,6 +148,108 @@ export function initCloud(callbacks) {
     subscribe();
   });
 }
+
+export function currentUser() {
+  return auth.currentUser;
+}
+
+/* ---------------- sign in / register ---------------- */
+
+export async function continueAsGuest() {
+  await signInAnonymously(auth);
+}
+
+export async function loginWithEmail(email, password) {
+  await signInWithEmailAndPassword(auth, email.trim(), password);
+}
+
+export async function registerWithEmail(email, password, name) {
+  const existing = auth.currentUser;
+  const credential = EmailAuthProvider.credential(email.trim(), password);
+  let result;
+
+  // upgrading a guest keeps the same uid, so entries already logged survive
+  if (existing && existing.isAnonymous) {
+    try {
+      result = await linkWithCredential(existing, credential);
+    } catch (err) {
+      if (err.code === 'auth/email-already-in-use' || err.code === 'auth/credential-already-in-use') {
+        result = await signInWithEmailAndPassword(auth, email.trim(), password);
+      } else {
+        throw err;
+      }
+    }
+  } else {
+    result = await createUserWithEmailAndPassword(auth, email.trim(), password);
+  }
+
+  if (name && name.trim()) {
+    await updateProfile(result.user, { displayName: name.trim() });
+  }
+  return result.user;
+}
+
+export async function signInWithGoogle() {
+  const provider = new GoogleAuthProvider();
+  const user = auth.currentUser;
+
+  if (user && user.isAnonymous) {
+    try {
+      return await linkWithPopup(user, provider);
+    } catch (err) {
+      // this Google account already owns data here — just switch to it
+      if (err.code === 'auth/credential-already-in-use' ||
+          err.code === 'auth/email-already-in-use') {
+        return await signInWithPopup(auth, provider);
+      }
+      throw err;
+    }
+  }
+  return await signInWithPopup(auth, provider);
+}
+
+export async function resetPassword(email) {
+  await sendPasswordResetEmail(auth, email.trim());
+}
+
+export async function signOutUser() {
+  unsubscribeAll();
+  await signOut(auth);
+}
+
+/* ---------------- profile ---------------- */
+
+export function hasPasswordProvider() {
+  const user = auth.currentUser;
+  return !!user && user.providerData.some((p) => p.providerId === 'password');
+}
+
+export async function changePassword(currentPassword, newPassword) {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Not signed in.');
+
+  // Firebase requires a fresh login before a password change
+  const credential = EmailAuthProvider.credential(user.email, currentPassword);
+  await reauthenticateWithCredential(user, credential);
+  await updatePassword(user, newPassword);
+}
+
+export async function saveProfile({ name, photo }) {
+  const user = auth.currentUser;
+  if (!user) return;
+
+  if (typeof name === 'string') {
+    await updateProfile(user, { displayName: name.trim() });
+  }
+  // the photo is kept in Firestore rather than the auth profile: auth
+  // photoURL is meant for short URLs, not inline image data
+  const patch = {};
+  if (typeof name === 'string') patch.displayName = name.trim();
+  if (photo !== undefined) patch.photo = photo;
+  if (Object.keys(patch).length) await setDoc(userDoc(), patch, { merge: true });
+}
+
+/* ---------------- data ---------------- */
 
 export async function cloudSaveSettings(settings) {
   if (!uid) return;
@@ -156,14 +274,14 @@ export async function cloudReplaceAll(data) {
     currency: data.currency,
     defaultIncome: data.defaultIncome,
     incomes: data.incomes
-  });
+  }, { merge: true });
   await writeExpensesInBatches(data.expenses);
 }
 
 export async function cloudClearAll() {
   if (!uid) return;
   await cloudClearExpenses();
-  await setDoc(userDoc(), { currency: 'PKR', defaultIncome: 0, incomes: {} });
+  await setDoc(userDoc(), { currency: 'PKR', defaultIncome: 0, incomes: {} }, { merge: true });
 }
 
 /** First-run helper: lifts existing localStorage data into the cloud. */
@@ -193,32 +311,6 @@ async function runBatches(items, apply) {
     for (const item of items.slice(i, i + 450)) apply(batch, item);
     await batch.commit();
   }
-}
-
-/* ---------------- optional Google account ---------------- */
-
-export async function signInWithGoogle() {
-  const provider = new GoogleAuthProvider();
-  const user = auth.currentUser;
-
-  // upgrading the anonymous account keeps the same uid, so nothing is lost
-  if (user && user.isAnonymous) {
-    try {
-      return await linkWithPopup(user, provider);
-    } catch (err) {
-      // this Google account already owns data here — just switch to it
-      if (err.code === 'auth/credential-already-in-use' ||
-          err.code === 'auth/email-already-in-use') {
-        return await signInWithPopup(auth, provider);
-      }
-      throw err;
-    }
-  }
-  return await signInWithPopup(auth, provider);
-}
-
-export async function signOutUser() {
-  await signOut(auth);
 }
 
 export { auth };

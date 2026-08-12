@@ -20,6 +20,15 @@ A clean, no-signup expense tracker. Set your monthly income, tap a date on the c
 - All-time category breakdown
 - Month-by-month summary table
 
+**Accounts**
+- Register with email and password, or continue with Google
+- Password reset by email, and change-password from the profile panel
+- Profile photo upload and editable display name
+- Guest mode for trying it without signing up — registering later upgrades
+  the guest account in place, so nothing logged as a guest is lost
+- Sign out clears the local cache, so a shared device never shows the
+  previous person's figures
+
 **Extras**
 - Every entry is saved to Firebase (Cloud Firestore) in real time
 - Works offline — changes queue locally and upload when you reconnect
@@ -37,10 +46,9 @@ a warning. To turn on cloud sync, do these three things once in the
 [Firebase console](https://console.firebase.google.com/project/expense-calculator-88fbe):
 
 **1. Enable authentication**
-Authentication → Get started → Sign-in method → enable **Anonymous**.
-Anonymous sign-in gives each browser its own account with no login screen, which is
-what lets the security rules keep your data private. Also enable **Google** if you
-want cross-device sync.
+Authentication → Get started → Sign-in method → enable **Email/Password**,
+**Google**, and **Anonymous** (anonymous powers the "continue as guest" button;
+skip it only if you remove that option).
 
 **2. Publish the security rules**
 Firestore Database → Rules → paste the contents of [`firestore.rules`](firestore.rules) → Publish.
@@ -63,9 +71,17 @@ step 2, which is why getting those right matters.
 ### How data is stored
 
 ```
-users/{uid}                 -> { currency, defaultIncome, incomes }
+users/{uid}                 -> { currency, defaultIncome, incomes,
+                                 displayName, photo }
 users/{uid}/expenses/{id}   -> { date, amount, category, note, createdAt }
 ```
+
+### Why the avatar is not in Firebase Storage
+
+Storage requires the Blaze (pay-as-you-go) plan for buckets created on recent
+projects. To stay on the free tier, the app crops and shrinks your picture to a
+256×256 JPEG in the browser (~2–20KB) and keeps the data URL in your Firestore
+document. The rules cap it at 300KB, well inside the 1MB document limit.
 
 ## Running it locally
 

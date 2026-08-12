@@ -8,8 +8,10 @@
 
 import {
   initCloud, cloudSaveSettings, cloudAddExpense, cloudDeleteExpense,
-  cloudReplaceAll, cloudClearAll, cloudMigrate, signInWithGoogle, signOutUser,
-  authErrorMessage
+  cloudReplaceAll, cloudClearAll, cloudMigrate,
+  loginWithEmail, registerWithEmail, signInWithGoogle, continueAsGuest,
+  resetPassword, signOutUser, changePassword, saveProfile,
+  hasPasswordProvider, currentUser, authErrorMessage
 } from './firebase.js';
 
 const STORAGE_KEY = 'expense-calculator-v1';
@@ -539,6 +541,7 @@ initCloud({
   onData({ settings, expenses }) {
     const firstDelivery = !cloudReady;
     cloudReady = true;
+    applyProfile(settings);
 
     // first run with data already in this browser: lift it up rather than
     // letting an empty cloud wipe it
@@ -563,45 +566,282 @@ initCloud({
   },
 
   onStatus({ state: kind, message, user }) {
+    if (kind === 'signed-out') {
+      showAuthScreen();
+      return;
+    }
+
+    showApp(user);
+
     if (kind === 'synced') {
-      setStatus('ok', user && !user.isAnonymous ? 'Synced' : 'Synced (this device)',
-        user && !user.isAnonymous
-          ? `Signed in as ${user.email || user.displayName}`
-          : 'Saved to the cloud. Sign in with Google to sync across devices.');
+      setStatus('ok', user && user.isAnonymous ? 'Synced (guest)' : 'Synced',
+        user && user.isAnonymous
+          ? 'Guest account — create an account to keep this data if you clear your browser.'
+          : `Signed in as ${user.email || user.displayName}`);
     } else if (kind === 'offline') {
       setStatus('warn', 'Offline', 'Showing cached data. Changes will upload when you reconnect.');
     } else if (kind === 'error') {
       setStatus('bad', 'Sync error', message);
-      showBanner(message + ' Your entries are still safe in this browser.');
+      showBanner(message);
     } else {
       setStatus('', 'Connecting…');
     }
-
-    const btn = $('authBtn');
-    btn.hidden = false;
-    btn.textContent = user && !user.isAnonymous ? 'Sign out' : 'Sign in with Google';
-    btn.dataset.mode = user && !user.isAnonymous ? 'out' : 'in';
   }
 });
 
-$('authBtn').addEventListener('click', async () => {
-  const btn = $('authBtn');
-  btn.disabled = true;
+/* ---------------- auth screen ---------------- */
+
+function showAuthScreen() {
+  cloudReady = false;
+  document.body.classList.remove('booting');
+  $('authScreen').hidden = false;
+  $('appShell').hidden = true;
+
+  // never leave one account's figures on screen for the next person
+  state = defaultState();
+  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(MIGRATED_KEY);
+  renderAll();
+}
+
+function showApp(user) {
+  document.body.classList.remove('booting');
+  $('authScreen').hidden = true;
+  $('appShell').hidden = false;
+  renderIdentity(user);
+}
+
+function authMessage(el, message, isError = true) {
+  const target = $(el);
+  target.textContent = message;
+  target.hidden = !message;
+  if (message && isError) target.classList.remove('ok');
+}
+
+function clearAuthMessages() {
+  $('authError').hidden = true;
+  $('authNotice').hidden = true;
+}
+
+async function runAuth(button, action) {
+  clearAuthMessages();
+  button.disabled = true;
+  const label = button.textContent;
+  button.textContent = 'Please wait…';
   try {
-    if (btn.dataset.mode === 'out') {
-      if (confirm('Sign out? This device will go back to its own local account.')) {
-        await signOutUser();
-        localStorage.removeItem(MIGRATED_KEY);
-      }
-    } else {
-      await signInWithGoogle();
-    }
+    await action();
   } catch (err) {
+    // closing the Google popup yourself is not an error worth shouting about
     if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
-      showBanner(`Sign-in failed: ${authErrorMessage(err)}`);
+      authMessage('authError', authErrorMessage(err));
     }
   } finally {
+    button.disabled = false;
+    button.textContent = label;
+  }
+}
+
+document.querySelectorAll('.auth-tab').forEach((tab) => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.auth-tab').forEach((t) => t.classList.remove('active'));
+    tab.classList.add('active');
+    const login = tab.dataset.authTab === 'login';
+    $('loginForm').hidden = !login;
+    $('registerForm').hidden = login;
+    clearAuthMessages();
+  });
+});
+
+$('loginForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button[type="submit"]');
+  runAuth(btn, () => loginWithEmail($('loginEmail').value, $('loginPassword').value));
+});
+
+$('registerForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  if ($('regPassword').value !== $('regConfirm').value) {
+    return authMessage('authError', 'The two passwords do not match.');
+  }
+  const btn = e.target.querySelector('button[type="submit"]');
+  runAuth(btn, () => registerWithEmail($('regEmail').value, $('regPassword').value, $('regName').value));
+});
+
+$('googleBtn').addEventListener('click', (e) => runAuth(e.currentTarget, signInWithGoogle));
+$('guestBtn').addEventListener('click', (e) => runAuth(e.currentTarget, continueAsGuest));
+
+$('forgotBtn').addEventListener('click', async (e) => {
+  const email = $('loginEmail').value.trim();
+  if (!email) return authMessage('authError', 'Enter your email above first, then tap this again.');
+  await runAuth(e.currentTarget, async () => {
+    await resetPassword(email);
+    authMessage('authNotice', `Reset link sent to ${email}. Check your inbox.`, false);
+    $('authNotice').classList.add('ok');
+  });
+});
+
+/* ---------------- profile ---------------- */
+
+function initials(user, name) {
+  const source = (name || user?.displayName || user?.email || '?').trim();
+  return source.charAt(0).toUpperCase() || '?';
+}
+
+function renderIdentity(user, profile = {}) {
+  const name = profile.displayName || user?.displayName || '';
+  const photo = profile.photo || user?.photoURL || '';
+
+  $('avatarInitial').textContent = initials(user, name);
+  $('avatarImg').hidden = !photo;
+  $('avatarInitial').hidden = !!photo;
+  if (photo) $('avatarImg').src = photo;
+
+  $('profileInitial').textContent = initials(user, name);
+  $('profilePhoto').hidden = !photo;
+  $('profileInitial').hidden = !!photo;
+  if (photo) $('profilePhoto').src = photo;
+  $('removePhotoBtn').hidden = !profile.photo;
+
+  $('profileName').textContent = name || (user?.isAnonymous ? 'Guest' : 'No name set');
+  $('profileEmail').textContent = user?.isAnonymous ? 'Guest account — not saved anywhere else' : (user?.email || '');
+  if (document.activeElement !== $('nameInput')) $('nameInput').value = name;
+
+  const canChangePassword = hasPasswordProvider();
+  $('passwordForm').hidden = !canChangePassword;
+  $('googleNote').hidden = canChangePassword || !!user?.isAnonymous;
+}
+
+// last known profile, so optimistic edits survive a re-render
+let localProfile = {};
+
+function applyProfile(settings) {
+  localProfile = {
+    displayName: settings?.displayName ?? localProfile.displayName,
+    photo: settings?.photo ?? localProfile.photo
+  };
+  renderIdentity(currentUser(), localProfile);
+}
+
+/** Paints a profile change straight away, without waiting on the network. */
+function previewProfile(patch) {
+  localProfile = { ...localProfile, ...patch };
+  renderIdentity(currentUser(), localProfile);
+}
+
+$('profileBtn').addEventListener('click', () => {
+  $('profileError').hidden = true;
+  $('profileNotice').hidden = true;
+  $('profileModal').hidden = false;
+});
+
+$('closeProfile').addEventListener('click', () => { $('profileModal').hidden = true; });
+$('profileModal').addEventListener('click', (e) => {
+  if (e.target === $('profileModal')) $('profileModal').hidden = true;
+});
+
+$('nameForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  try {
+    previewProfile({ displayName: $('nameInput').value.trim() });
+    await saveProfile({ name: $('nameInput').value });
+    $('profileError').hidden = true;
+    authMessage('profileNotice', 'Name updated.', false);
+    $('profileNotice').classList.add('ok');
+  } catch (err) {
+    authMessage('profileError', authErrorMessage(err));
+  }
+});
+
+$('passwordForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const btn = e.target.querySelector('button[type="submit"]');
+  btn.disabled = true;
+  try {
+    await changePassword($('currentPassword').value, $('newPassword').value);
+    $('currentPassword').value = '';
+    $('newPassword').value = '';
+    $('profileError').hidden = true;
+    authMessage('profileNotice', 'Password updated.', false);
+    $('profileNotice').classList.add('ok');
+  } catch (err) {
+    $('profileNotice').hidden = true;
+    authMessage('profileError', authErrorMessage(err));
+  } finally {
     btn.disabled = false;
+  }
+});
+
+$('photoBtn').addEventListener('click', () => $('photoFile').click());
+
+$('photoFile').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  try {
+    const dataUrl = await resizeImage(file, 256);
+    previewProfile({ photo: dataUrl });          // show it now
+    authMessage('profileNotice', 'Saving photo…', false);
+    $('profileNotice').classList.add('ok');
+    $('profileError').hidden = true;
+    await saveProfile({ photo: dataUrl });       // then persist
+    authMessage('profileNotice', 'Photo updated.', false);
+    $('profileNotice').classList.add('ok');
+  } catch (err) {
+    $('profileNotice').hidden = true;
+    authMessage('profileError', `Could not save that image: ${authErrorMessage(err)}`);
+  }
+});
+
+$('removePhotoBtn').addEventListener('click', async () => {
+  try {
+    previewProfile({ photo: '' });
+    await saveProfile({ photo: '' });
+    authMessage('profileNotice', 'Photo removed.', false);
+    $('profileNotice').classList.add('ok');
+  } catch (err) {
+    authMessage('profileError', authErrorMessage(err));
+  }
+});
+
+/**
+ * Squares off and shrinks the picture before upload. Firebase Storage needs a
+ * paid plan on new projects, so the avatar rides along in the Firestore
+ * document instead — which means it has to stay small.
+ */
+function resizeImage(file, size) {
+  return new Promise((resolve, reject) => {
+    if (!file.type.startsWith('image/')) return reject(new Error('that file is not an image'));
+
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('the file could not be read'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onerror = () => reject(new Error('the image could not be decoded'));
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = canvas.height = size;
+        const ctx = canvas.getContext('2d');
+
+        // centre-crop to a square so faces do not end up stretched
+        const side = Math.min(img.width, img.height);
+        ctx.drawImage(img, (img.width - side) / 2, (img.height - side) / 2,
+          side, side, 0, 0, size, size);
+
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+$('signOutBtn').addEventListener('click', async () => {
+  if (!confirm('Sign out of this device?')) return;
+  $('profileModal').hidden = true;
+  try {
+    await signOutUser();
+  } catch (err) {
+    showBanner(authErrorMessage(err));
   }
 });
 
