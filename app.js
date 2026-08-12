@@ -1,8 +1,19 @@
 /* =========================================================
-   Expense Calculator — all state lives in localStorage.
+   Expense Calculator
+
+   Firestore is the source of truth. localStorage keeps a mirror so the
+   first paint is instant and the app still works if the cloud can't be
+   reached at all.
    ========================================================= */
 
+import {
+  initCloud, cloudSaveSettings, cloudAddExpense, cloudDeleteExpense,
+  cloudReplaceAll, cloudClearAll, cloudMigrate, signInWithGoogle, signOutUser,
+  authErrorMessage
+} from './firebase.js';
+
 const STORAGE_KEY = 'expense-calculator-v1';
+const MIGRATED_KEY = 'expense-calculator-migrated';
 
 const CURRENCY_SYMBOLS = {
   PKR: '₨', INR: '₹', USD: '$', EUR: '€', GBP: '£', AED: 'د.إ', SAR: '﷼'
@@ -21,6 +32,7 @@ const defaultState = () => ({
 let state = load();
 let viewDate = new Date();           // which month the Monthly tab is showing
 let modalDate = null;                // "YYYY-MM-DD" currently open in the modal
+let cloudReady = false;              // true once Firestore has delivered data
 
 /* ---------------- storage ---------------- */
 
@@ -28,8 +40,7 @@ function load() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return defaultState();
-    const parsed = JSON.parse(raw);
-    return Object.assign(defaultState(), parsed);
+    return normalize(Object.assign(defaultState(), JSON.parse(raw)));
   } catch {
     return defaultState();
   }
@@ -37,6 +48,24 @@ function load() {
 
 function save() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+}
+
+/**
+ * Older saves used numeric ids and had no createdAt. Firestore document ids
+ * are strings, so bring everything onto the current shape.
+ */
+function normalize(data) {
+  data.expenses = (data.expenses || []).map((e) => ({
+    ...e,
+    id: String(e.id),
+    amount: Number(e.amount) || 0,
+    createdAt: Number(e.createdAt) || Number(e.id) || 0
+  }));
+  return data;
+}
+
+function newId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 /* ---------------- helpers ---------------- */
@@ -167,7 +196,7 @@ function renderCalendar(key) {
 
 function renderMonthList(list) {
   const box = $('monthList');
-  const sorted = [...list].sort((a, b) => b.date.localeCompare(a.date) || b.id - a.id);
+  const sorted = [...list].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
   $('listCount').textContent = `${sorted.length} ${sorted.length === 1 ? 'entry' : 'entries'}`;
 
   if (!sorted.length) {
@@ -288,15 +317,21 @@ function renderBars(container, data, emptyMsg, sortDesc = true) {
 /* ---------------- expense actions ---------------- */
 
 function addExpense(date, amount, category, note) {
-  state.expenses.push({
-    id: Date.now() + Math.floor(Math.random() * 1000),
+  const expense = {
+    id: newId(),
     date,
     amount: Number(amount),
     category,
-    note: note.trim()
-  });
+    note: note.trim(),
+    createdAt: Date.now()
+  };
+
+  // apply locally first so the UI never waits on the network; the Firestore
+  // snapshot reconciles afterwards
+  state.expenses.push(expense);
   save();
   renderAll();
+  push(() => cloudAddExpense(expense));
 }
 
 function deleteExpense(id) {
@@ -304,6 +339,27 @@ function deleteExpense(id) {
   save();
   renderAll();
   if (modalDate) renderModalList();
+  push(() => cloudDeleteExpense(id));
+}
+
+function saveSettings() {
+  save();
+  push(() => cloudSaveSettings({
+    currency: state.currency,
+    defaultIncome: state.defaultIncome,
+    incomes: state.incomes
+  }));
+}
+
+/** Fires a cloud write, surfacing failures instead of losing them silently. */
+function push(fn) {
+  if (!cloudReady) return;
+  Promise.resolve()
+    .then(fn)
+    .catch((err) => {
+      console.error('[cloud write]', err);
+      showBanner(`Could not save to the cloud: ${err.message}`);
+    });
 }
 
 /* ---------------- modal ---------------- */
@@ -327,7 +383,7 @@ function closeModal() {
 function renderModalList() {
   const list = state.expenses
     .filter((e) => e.date === modalDate)
-    .sort((a, b) => b.id - a.id);
+    .sort((a, b) => b.createdAt - a.createdAt);
 
   $('dayTotal').textContent = fmt(sum(list));
   const box = $('dayList');
@@ -386,7 +442,7 @@ $('saveIncome').addEventListener('click', () => {
   } else {
     state.incomes[monthKey(viewDate)] = value;
   }
-  save();
+  saveSettings();
   renderAll();
 });
 
@@ -418,7 +474,7 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('moda
 
 $('currencySelect').addEventListener('change', (e) => {
   state.currency = e.target.value;
-  save();
+  saveSettings();
   renderAll();
   if (modalDate) renderModalList();
 });
@@ -442,10 +498,11 @@ $('importFile').addEventListener('change', (e) => {
     try {
       const data = JSON.parse(reader.result);
       if (!Array.isArray(data.expenses)) throw new Error('bad file');
-      state = Object.assign(defaultState(), data);
+      state = normalize(Object.assign(defaultState(), data));
       save();
       $('currencySelect').value = state.currency;
       renderAll();
+      push(() => cloudReplaceAll(state));
       alert('Backup restored.');
     } catch {
       alert('That file could not be read as an expense backup.');
@@ -456,14 +513,100 @@ $('importFile').addEventListener('change', (e) => {
 });
 
 $('resetBtn').addEventListener('click', () => {
-  if (!confirm('This deletes every income and expense you have saved. Continue?')) return;
+  if (!confirm('This deletes every income and expense you have saved, on this device and in the cloud. Continue?')) return;
   state = defaultState();
   save();
   $('currencySelect').value = state.currency;
   renderAll();
+  push(() => cloudClearAll());
+});
+
+/* ---------------- cloud sync ---------------- */
+
+function showBanner(message) {
+  $('bannerText').textContent = message;
+  $('banner').hidden = false;
+}
+
+function setStatus(kind, label, title) {
+  const el = $('syncStatus');
+  el.className = 'sync ' + kind;
+  el.title = title || label;
+  $('syncText').textContent = label;
+}
+
+initCloud({
+  onData({ settings, expenses }) {
+    const firstDelivery = !cloudReady;
+    cloudReady = true;
+
+    // first run with data already in this browser: lift it up rather than
+    // letting an empty cloud wipe it
+    if (firstDelivery && !expenses.length && state.expenses.length &&
+        !localStorage.getItem(MIGRATED_KEY)) {
+      localStorage.setItem(MIGRATED_KEY, '1');
+      push(() => cloudMigrate(state));
+      return;
+    }
+    localStorage.setItem(MIGRATED_KEY, '1');
+
+    state = normalize({
+      currency: settings.currency || state.currency,
+      defaultIncome: Number(settings.defaultIncome) || 0,
+      incomes: settings.incomes || {},
+      expenses
+    });
+    save();
+    $('currencySelect').value = state.currency;
+    renderAll();
+    if (modalDate) renderModalList();
+  },
+
+  onStatus({ state: kind, message, user }) {
+    if (kind === 'synced') {
+      setStatus('ok', user && !user.isAnonymous ? 'Synced' : 'Synced (this device)',
+        user && !user.isAnonymous
+          ? `Signed in as ${user.email || user.displayName}`
+          : 'Saved to the cloud. Sign in with Google to sync across devices.');
+    } else if (kind === 'offline') {
+      setStatus('warn', 'Offline', 'Showing cached data. Changes will upload when you reconnect.');
+    } else if (kind === 'error') {
+      setStatus('bad', 'Sync error', message);
+      showBanner(message + ' Your entries are still safe in this browser.');
+    } else {
+      setStatus('', 'Connecting…');
+    }
+
+    const btn = $('authBtn');
+    btn.hidden = false;
+    btn.textContent = user && !user.isAnonymous ? 'Sign out' : 'Sign in with Google';
+    btn.dataset.mode = user && !user.isAnonymous ? 'out' : 'in';
+  }
+});
+
+$('authBtn').addEventListener('click', async () => {
+  const btn = $('authBtn');
+  btn.disabled = true;
+  try {
+    if (btn.dataset.mode === 'out') {
+      if (confirm('Sign out? This device will go back to its own local account.')) {
+        await signOutUser();
+        localStorage.removeItem(MIGRATED_KEY);
+      }
+    } else {
+      await signInWithGoogle();
+    }
+  } catch (err) {
+    if (err.code !== 'auth/popup-closed-by-user' && err.code !== 'auth/cancelled-popup-request') {
+      showBanner(`Sign-in failed: ${authErrorMessage(err)}`);
+    }
+  } finally {
+    btn.disabled = false;
+  }
 });
 
 /* ---------------- boot ---------------- */
 
 $('currencySelect').value = state.currency;
+save();        // persist the normalised shape for anything upgraded by load()
 renderAll();

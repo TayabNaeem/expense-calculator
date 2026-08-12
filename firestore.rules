@@ -1,0 +1,33 @@
+rules_version = '2';
+
+// Paste these into: Firebase console -> Firestore Database -> Rules -> Publish
+//
+// Each signed-in account can only touch documents under its own uid. The
+// default deny-all rules block the app entirely; open rules (`if true`)
+// would let anyone read or delete your expenses, since this repo is public
+// and the project id is visible in firebase.js.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+      match /expenses/{expenseId} {
+        allow read, delete: if request.auth != null && request.auth.uid == userId;
+
+        allow create, update: if request.auth != null
+          && request.auth.uid == userId
+          && request.resource.data.amount is number
+          && request.resource.data.amount >= 0
+          && request.resource.data.date is string
+          && request.resource.data.date.size() == 10
+          && request.resource.data.category is string
+          && request.resource.data.category.size() <= 40
+          && request.resource.data.note.size() <= 200;
+      }
+    }
+
+    // anything not matched above stays denied
+  }
+}
