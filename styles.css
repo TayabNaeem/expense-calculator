@@ -315,6 +315,9 @@ input[type="date"] { color-scheme: dark; }
   display: flex; align-items: center; justify-content: center;
   padding: 18px; z-index: 50;
 }
+/* this must be here: the display:flex above outranks the browser's own
+   [hidden] rule, so without it the modal never actually hides */
+.modal-backdrop[hidden] { display: none; }
 .modal {
   background: var(--bg-2);
   border: 1px solid var(--line);
