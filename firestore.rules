@@ -33,7 +33,8 @@ service cloud.firestore {
           && request.resource.data.date.size() == 10
           && request.resource.data.category is string
           && request.resource.data.category.size() <= 40
-          && request.resource.data.note.size() <= 200;
+          && (!('note' in request.resource.data)
+              || request.resource.data.note.size() <= 200);
       }
     }
 
