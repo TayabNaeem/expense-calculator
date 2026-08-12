@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Expense Calculator</title>
+<meta name="description" content="Track your monthly income, log daily expenses on a calendar, and watch your budget update in real time." />
+<meta name="theme-color" content="#0f1117" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">₿</span>
+    <div>
+      <h1>Expense Calculator</h1>
+      <p class="brand-sub">Budget, tracked day by day</p>
+    </div>
+  </div>
+  <div class="topbar-actions">
+    <select id="currencySelect" class="mini-select" title="Currency">
+      <option value="PKR">₨ PKR</option>
+      <option value="INR">₹ INR</option>
+      <option value="USD">$ USD</option>
+      <option value="EUR">€ EUR</option>
+      <option value="GBP">£ GBP</option>
+      <option value="AED">د.إ AED</option>
+      <option value="SAR">﷼ SAR</option>
+    </select>
+    <button id="exportBtn" class="ghost-btn" title="Download a backup of your data">Export</button>
+    <button id="importBtn" class="ghost-btn" title="Restore from a backup file">Import</button>
+    <input type="file" id="importFile" accept="application/json" hidden />
+  </div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button class="tab active" role="tab" data-tab="monthly">Monthly Expense</button>
+  <button class="tab" role="tab" data-tab="total">Total Expenses Till Now</button>
+</nav>
+
+<main>
+  <!-- ============ MONTHLY TAB ============ -->
+  <section id="panel-monthly" class="panel active" role="tabpanel">
+
+    <div class="month-nav">
+      <button id="prevMonth" class="nav-btn" aria-label="Previous month">‹</button>
+      <div class="month-title">
+        <h2 id="monthLabel">—</h2>
+        <button id="todayBtn" class="link-btn">Jump to today</button>
+      </div>
+      <button id="nextMonth" class="nav-btn" aria-label="Next month">›</button>
+    </div>
+
+    <div class="income-card">
+      <label for="incomeInput">Total income for this month</label>
+      <div class="income-row">
+        <span class="cur-prefix" data-cur>₨</span>
+        <input type="number" id="incomeInput" min="0" step="any" placeholder="0" inputmode="decimal" />
+        <button id="saveIncome" class="primary-btn">Save</button>
+      </div>
+      <label class="check">
+        <input type="checkbox" id="applyAllMonths" />
+        <span>Use this as the default income for every month</span>
+      </label>
+    </div>
+
+    <div class="stats">
+      <div class="stat">
+        <span class="stat-label">Income</span>
+        <span class="stat-value" id="mIncome">—</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Spent this month</span>
+        <span class="stat-value danger" id="mSpent">—</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Remaining budget</span>
+        <span class="stat-value good" id="mRemaining">—</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Daily average</span>
+        <span class="stat-value" id="mAvg">—</span>
+      </div>
+    </div>
+
+    <div class="progress-wrap">
+      <div class="progress"><div class="progress-fill" id="progressFill"></div></div>
+      <div class="progress-meta"><span id="progressText">0% of budget used</span></div>
+    </div>
+
+    <div class="calendar-card">
+      <div class="weekdays">
+        <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+      </div>
+      <div class="calendar" id="calendar"></div>
+      <p class="hint">Click any date to add an expense for that day.</p>
+    </div>
+
+    <div class="list-card">
+      <div class="list-head">
+        <h3>Expenses in <span id="listMonthLabel">this month</span></h3>
+        <span class="pill" id="listCount">0 entries</span>
+      </div>
+      <div id="monthList" class="entries"></div>
+    </div>
+
+    <div class="breakdown-card">
+      <h3>Category breakdown</h3>
+      <div id="categoryBreakdown" class="bars"></div>
+    </div>
+  </section>
+
+  <!-- ============ TOTAL TAB ============ -->
+  <section id="panel-total" class="panel" role="tabpanel">
+    <div class="stats big">
+      <div class="stat">
+        <span class="stat-label">Total expenses till now</span>
+        <span class="stat-value danger" id="tSpent">—</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Total income till now</span>
+        <span class="stat-value" id="tIncome">—</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Net savings</span>
+        <span class="stat-value good" id="tNet">—</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Total entries</span>
+        <span class="stat-value" id="tCount">—</span>
+      </div>
+    </div>
+
+    <div class="breakdown-card">
+      <h3>Spending by month</h3>
+      <div id="monthlyChart" class="bars"></div>
+    </div>
+
+    <div class="breakdown-card">
+      <h3>All-time category breakdown</h3>
+      <div id="totalCategory" class="bars"></div>
+    </div>
+
+    <div class="list-card">
+      <div class="list-head">
+        <h3>Month-by-month summary</h3>
+      </div>
+      <div class="table-wrap">
+        <table class="summary-table">
+          <thead>
+            <tr><th>Month</th><th>Income</th><th>Spent</th><th>Remaining</th><th>Entries</th></tr>
+          </thead>
+          <tbody id="summaryBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="danger-zone">
+      <button id="resetBtn" class="danger-btn">Reset all data</button>
+    </div>
+  </section>
+</main>
+
+<!-- ============ ADD EXPENSE MODAL ============ -->
+<div class="modal-backdrop" id="modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-head">
+      <h3 id="modalTitle">Expenses</h3>
+      <button id="closeModal" class="icon-btn" aria-label="Close">✕</button>
+    </div>
+
+    <form id="expenseForm" class="expense-form">
+      <div class="field">
+        <label for="expDate">Date</label>
+        <input type="date" id="expDate" required />
+      </div>
+      <div class="field">
+        <label for="expAmount">Amount</label>
+        <input type="number" id="expAmount" min="0" step="any" placeholder="0" inputmode="decimal" required />
+      </div>
+      <div class="field">
+        <label for="expCategory">Category</label>
+        <select id="expCategory">
+          <option>Food</option>
+          <option>Transport</option>
+          <option>Bills</option>
+          <option>Shopping</option>
+          <option>Health</option>
+          <option>Entertainment</option>
+          <option>Education</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div class="field wide">
+        <label for="expNote">Note (optional)</label>
+        <input type="text" id="expNote" placeholder="e.g. lunch with team" maxlength="80" />
+      </div>
+      <button type="submit" class="primary-btn wide">Add expense</button>
+    </form>
+
+    <div class="day-entries">
+      <h4>On this day <span class="pill" id="dayTotal">₨0</span></h4>
+      <div id="dayList" class="entries"></div>
+    </div>
+  </div>
+</div>
+
+<footer class="foot">Your data is saved privately in this browser — nothing is uploaded anywhere.</footer>
+
+<script src="app.js"></script>
+</body>
+</html>

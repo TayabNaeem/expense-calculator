@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(node --version)",
+      "PowerShell(npm --version)",
+      "PowerShell(gh --version)",
+      "PowerShell(vercel --version)"
+    ]
+  }
+}
