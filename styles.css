@@ -48,19 +48,19 @@ body {
 
 .brand { display: flex; align-items: center; gap: 14px; }
 
+/* no plate behind the logo — just the light mark itself */
 .brand-mark {
-  width: 46px; height: 46px;
+  width: 44px; height: 44px;
   display: grid; place-items: center;
-  border-radius: 13px;
-  font-size: 22px; font-weight: 700;
-  background: linear-gradient(140deg, var(--accent), var(--accent-2));
-  box-shadow: 0 8px 20px rgba(108, 140, 255, .35);
+  color: #cdd6ff;
+  flex-shrink: 0;
 }
+.brand-mark svg { width: 100%; height: 100%; display: block; }
 
 .topbar h1 { margin: 0; font-size: 21px; letter-spacing: -.3px; }
 .brand-sub { margin: 2px 0 0; color: var(--muted); font-size: 13px; }
 
-.topbar-actions { display: flex; gap: 8px; align-items: center; }
+.topbar-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
 .mini-select, .ghost-btn {
   background: var(--bg-2);
@@ -73,6 +73,16 @@ body {
   font-family: inherit;
 }
 .ghost-btn:hover, .mini-select:hover { border-color: var(--accent); }
+
+/* every control in the header shares one width so the row lines up */
+.topbar-actions > .ghost-btn,
+.topbar-actions > .mini-select {
+  width: 104px;
+  text-align: center;
+  text-align-last: center;
+  height: 40px;
+  padding: 0 10px;
+}
 
 /* ---------- tabs ---------- */
 .tabs {
@@ -290,7 +300,14 @@ input[type="date"] { color-scheme: dark; }
 .bar-row { display: grid; grid-template-columns: 108px 1fr auto; align-items: center; gap: 12px; font-size: 13px; }
 .bar-track { height: 9px; background: var(--bg-3); border-radius: 99px; overflow: hidden; }
 .bar-fill { height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--accent), var(--accent-2)); }
-.bar-val { font-weight: 600; font-size: 13px; white-space: nowrap; }
+.bar-val {
+  font-weight: 600; font-size: 13px; white-space: nowrap;
+  display: flex; align-items: baseline; gap: 8px; justify-content: flex-end;
+}
+.bar-pct { color: var(--muted); font-weight: 500; font-size: 11.5px; min-width: 42px; text-align: right; }
+
+.list-tools { display: flex; align-items: center; gap: 8px; }
+.list-tools .mini-select { padding: 7px 10px; font-size: 12.5px; }
 .bar-label { color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ---------- table ---------- */
@@ -360,20 +377,35 @@ input[type="date"] { color-scheme: dark; }
 
 /* ---------- sync indicator ---------- */
 .sync {
-  display: inline-flex; align-items: center; gap: 7px;
+  position: relative;
+  width: 40px; height: 40px;
+  display: inline-grid; place-items: center;
   background: var(--bg-2);
   border: 1px solid var(--line);
-  border-radius: 99px;
-  padding: 7px 13px 7px 11px;
-  font-size: 12.5px;
+  border-radius: 10px;
   color: var(--muted);
-  white-space: nowrap;
+  cursor: help;
+  padding: 0;
+  flex-shrink: 0;
 }
+.sync svg { width: 19px; height: 19px; }
+.sync:hover { border-color: var(--accent); }
+
+/* state dot rides on the corner of the cloud */
 .sync-dot {
+  position: absolute;
+  right: 5px; bottom: 5px;
   width: 8px; height: 8px; border-radius: 50%;
   background: var(--muted);
-  flex-shrink: 0;
+  border: 2px solid var(--bg-2);
+  box-sizing: content-box;
   animation: pulse 1.4s ease-in-out infinite;
+}
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
 }
 .sync.ok .sync-dot { background: var(--good); animation: none; }
 .sync.warn .sync-dot { background: var(--warn); animation: none; }
@@ -403,7 +435,7 @@ body.booting .auth-screen, body.booting #appShell { visibility: hidden; }
 }
 
 .auth-brand { text-align: center; margin-bottom: 22px; }
-.auth-brand .brand-mark { display: inline-grid; margin-bottom: 12px; }
+.auth-brand .brand-mark { width: 58px; height: 58px; margin: 0 auto 14px; }
 .auth-brand h1 { margin: 0 0 6px; font-size: 21px; letter-spacing: -.3px; }
 .auth-brand p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
 
@@ -483,7 +515,7 @@ body.booting .auth-screen, body.booting #appShell { visibility: hidden; }
 
 /* ---------- avatar + profile ---------- */
 .avatar-btn {
-  width: 38px; height: 38px;
+  width: 40px; height: 40px;
   border-radius: 50%;
   border: 1px solid var(--line);
   background: linear-gradient(140deg, var(--accent), var(--accent-2));
@@ -544,8 +576,19 @@ body.booting .auth-screen, body.booting #appShell { visibility: hidden; }
 }
 .banner[hidden] { display: none; }
 
+@media (max-width: 700px) {
+  /* the fixed width would overflow a phone — share the row instead,
+     which keeps the controls equal to each other either way */
+  .topbar { flex-direction: column; align-items: stretch; }
+  .topbar-actions { width: 100%; }
+  .topbar-actions > .ghost-btn,
+  .topbar-actions > .mini-select { flex: 1 1 0; width: auto; min-width: 0; }
+}
+
 @media (max-width: 560px) {
   .stat-value { font-size: 19px; }
+  .list-head { flex-direction: column; align-items: stretch; gap: 10px; }
+  .list-tools { justify-content: space-between; }
   .stats.big .stat-value { font-size: 21px; }
   .expense-form { grid-template-columns: 1fr; }
   .day { min-height: 46px; padding: 5px 4px; }

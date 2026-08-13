@@ -140,13 +140,6 @@ function renderMonthly() {
   $('mRemaining').textContent = fmt(remaining);
   $('mRemaining').classList.toggle('over', remaining < 0);
 
-  // daily average uses days elapsed for the current month, full length otherwise
-  const now = new Date();
-  const isCurrentMonth = monthKey(now) === key;
-  const daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate();
-  const daysCounted = isCurrentMonth ? now.getDate() : daysInMonth;
-  $('mAvg').textContent = fmt(spent / daysCounted);
-
   const pct = income > 0 ? (spent / income) * 100 : (spent > 0 ? 100 : 0);
   const fill = $('progressFill');
   fill.style.width = Math.min(pct, 100) + '%';
@@ -198,7 +191,14 @@ function renderCalendar(key) {
 
 function renderMonthList(list) {
   const box = $('monthList');
-  const sorted = [...list].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt);
+  const ascending = $('sortSelect').value === 'asc';
+  const sorted = [...list].sort((a, b) => {
+    const byDate = ascending
+      ? a.date.localeCompare(b.date)
+      : b.date.localeCompare(a.date);
+    // entries sharing a date fall back to when they were added
+    return byDate || (ascending ? a.createdAt - b.createdAt : b.createdAt - a.createdAt);
+  });
   $('listCount').textContent = `${sorted.length} ${sorted.length === 1 ? 'entry' : 'entries'}`;
 
   if (!sorted.length) {
@@ -303,15 +303,17 @@ function renderBars(container, data, emptyMsg, sortDesc = true) {
   }
   if (sortDesc) pairs.sort((a, b) => b[1] - a[1]);
 
-  const max = Math.max(...pairs.map(([, v]) => v));
+  // bars are a share of the total, so the widths add up to the whole
+  const total = pairs.reduce((running, [, v]) => running + v, 0);
   container.innerHTML = '';
   for (const [label, value] of pairs) {
+    const share = total > 0 ? (value / total) * 100 : 0;
     const row = document.createElement('div');
     row.className = 'bar-row';
     row.innerHTML = `
       <span class="bar-label" title="${escapeHtml(label)}">${escapeHtml(label)}</span>
-      <span class="bar-track"><span class="bar-fill" style="width:${(value / max) * 100}%"></span></span>
-      <span class="bar-val">${fmt(value)}</span>`;
+      <span class="bar-track"><span class="bar-fill" style="width:${share}%"></span></span>
+      <span class="bar-val">${fmt(value)}<span class="bar-pct">${share.toFixed(1)}%</span></span>`;
     container.appendChild(row);
   }
 }
@@ -425,6 +427,8 @@ $('nextMonth').addEventListener('click', () => {
   viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1);
   renderMonthly();
 });
+
+$('sortSelect').addEventListener('change', () => renderMonthly());
 
 $('todayBtn').addEventListener('click', () => {
   viewDate = new Date();

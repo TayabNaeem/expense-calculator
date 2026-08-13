@@ -6,7 +6,7 @@
 <title>Expense Calculator</title>
 <meta name="description" content="Track your monthly income, log daily expenses on a calendar, and watch your budget update in real time." />
 <meta name="theme-color" content="#0f1117" />
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💰</text></svg>" />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48' fill='none' stroke='%238fa6ff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><circle cx='15' cy='13' r='8'/><path d='M15 8.5v9M29 20l4.5-4.5L38 20M33.5 15.5v10'/><rect x='19' y='26' width='21' height='17' rx='3.5'/></svg>" />
 <link rel="stylesheet" href="styles.css" />
 </head>
 <body class="booting">
@@ -15,7 +15,18 @@
 <div class="auth-screen" id="authScreen">
   <div class="auth-card">
     <div class="auth-brand">
-      <span class="brand-mark">₿</span>
+      <span class="brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.6"
+           stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="14.5" cy="13.5" r="8.5" />
+        <path d="M14.5 8.6v9.8" />
+        <path d="M17 10.6c-.5-.8-1.4-1.2-2.5-1.2-1.4 0-2.5.8-2.5 1.9s1.1 1.9 2.5 1.9 2.5.8 2.5 1.9-1.1 1.9-2.5 1.9c-1.1 0-2-.4-2.5-1.2" />
+        <path d="M28.5 20.5 33.5 15.5l5 5" />
+        <path d="M33.5 15.5v10.5" />
+        <rect x="19" y="26" width="21" height="17" rx="3.5" />
+        <path d="M24.5 31.8h4M31 31.8h4M24.5 37.4h4M31 37.4h4" />
+      </svg>
+    </span>
       <h1>Expense Calculator</h1>
       <p>Sign in to keep your expenses synced across devices.</p>
     </div>
@@ -82,16 +93,32 @@
 
 <header class="topbar">
   <div class="brand">
-    <span class="brand-mark">₿</span>
+    <span class="brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.6"
+           stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="14.5" cy="13.5" r="8.5" />
+        <path d="M14.5 8.6v9.8" />
+        <path d="M17 10.6c-.5-.8-1.4-1.2-2.5-1.2-1.4 0-2.5.8-2.5 1.9s1.1 1.9 2.5 1.9 2.5.8 2.5 1.9-1.1 1.9-2.5 1.9c-1.1 0-2-.4-2.5-1.2" />
+        <path d="M28.5 20.5 33.5 15.5l5 5" />
+        <path d="M33.5 15.5v10.5" />
+        <rect x="19" y="26" width="21" height="17" rx="3.5" />
+        <path d="M24.5 31.8h4M31 31.8h4M24.5 37.4h4M31 37.4h4" />
+      </svg>
+    </span>
     <div>
       <h1>Expense Calculator</h1>
       <p class="brand-sub">Budget, tracked day by day</p>
     </div>
   </div>
   <div class="topbar-actions">
-    <span id="syncStatus" class="sync" title="Sync status">
-      <span class="sync-dot"></span><span id="syncText">Connecting…</span>
-    </span>
+    <button type="button" id="syncStatus" class="sync" title="Sync status" aria-label="Sync status">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M17.5 19a4.5 4.5 0 0 0 .5-8.97A6 6 0 0 0 6.2 9.3 4.5 4.5 0 0 0 6.5 19z" />
+      </svg>
+      <span class="sync-dot"></span>
+      <span id="syncText" class="sr-only">Connecting…</span>
+    </button>
     <select id="currencySelect" class="mini-select" title="Currency">
       <option value="PKR">₨ PKR</option>
       <option value="INR">₹ INR</option>
@@ -157,10 +184,6 @@
         <span class="stat-label">Remaining budget</span>
         <span class="stat-value good" id="mRemaining">—</span>
       </div>
-      <div class="stat">
-        <span class="stat-label">Daily average</span>
-        <span class="stat-value" id="mAvg">—</span>
-      </div>
     </div>
 
     <div class="progress-wrap">
@@ -179,7 +202,13 @@
     <div class="list-card">
       <div class="list-head">
         <h3>Expenses in <span id="listMonthLabel">this month</span></h3>
-        <span class="pill" id="listCount">0 entries</span>
+        <div class="list-tools">
+          <select id="sortSelect" class="mini-select" title="Sort expenses" aria-label="Sort expenses">
+            <option value="desc">Date — newest first</option>
+            <option value="asc">Date — oldest first</option>
+          </select>
+          <span class="pill" id="listCount">0 entries</span>
+        </div>
       </div>
       <div id="monthList" class="entries"></div>
     </div>
