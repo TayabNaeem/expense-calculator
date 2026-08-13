@@ -17,6 +17,18 @@ import {
 const STORAGE_KEY = 'expense-calculator-v1';
 const MIGRATED_KEY = 'expense-calculator-migrated';
 
+/**
+ * Accounts that see the sync diagnostics panel. This only decides what the
+ * profile panel renders — it is not a security boundary, since anyone can
+ * read this file. What actually protects the data is firestore.rules, which
+ * scopes every document to its own uid.
+ */
+const OWNER_EMAILS = ['tayyabnaeem26102001@gmail.com'];
+
+function isOwner(user) {
+  return !!user?.email && OWNER_EMAILS.includes(user.email.toLowerCase());
+}
+
 const CURRENCY_SYMBOLS = {
   PKR: '₨', INR: '₹', USD: '$', EUR: '€', GBP: '£', AED: 'د.إ', SAR: '﷼'
 };
@@ -534,11 +546,12 @@ function showBanner(message) {
   $('banner').hidden = false;
 }
 
-function setStatus(kind, label, title) {
+function setStatus(kind, label, detail) {
   const el = $('syncStatus');
   el.className = 'sync ' + kind;
-  el.title = title || label;
+  el.title = detail || label;
   $('syncText').textContent = label;
+  $('syncDetail').textContent = detail || '';
 }
 
 initCloud({
@@ -576,6 +589,7 @@ initCloud({
     }
 
     showApp(user);
+    $('syncSection').hidden = !isOwner(user);
 
     if (kind === 'synced') {
       setStatus('ok', user && user.isAnonymous ? 'Synced (guest)' : 'Synced',
@@ -586,7 +600,10 @@ initCloud({
       setStatus('warn', 'Offline', 'Showing cached data. Changes will upload when you reconnect.');
     } else if (kind === 'error') {
       setStatus('bad', 'Sync error', message);
-      showBanner(message);
+      // the setup-specific wording only helps whoever administers the project
+      showBanner(isOwner(user)
+        ? message
+        : 'Could not reach the server. Your entries are saved on this device and will upload once you are back online.');
     } else {
       setStatus('', 'Connecting…');
     }

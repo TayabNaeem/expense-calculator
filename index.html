@@ -111,14 +111,6 @@
     </div>
   </div>
   <div class="topbar-actions">
-    <button type="button" id="syncStatus" class="sync" title="Sync status" aria-label="Sync status">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
-           stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M17.5 19a4.5 4.5 0 0 0 .5-8.97A6 6 0 0 0 6.2 9.3 4.5 4.5 0 0 0 6.5 19z" />
-      </svg>
-      <span class="sync-dot"></span>
-      <span id="syncText" class="sr-only">Connecting…</span>
-    </button>
     <select id="currencySelect" class="mini-select" title="Currency">
       <option value="PKR">₨ PKR</option>
       <option value="INR">₹ INR</option>
@@ -370,6 +362,16 @@
 
     <p class="auth-msg" id="profileError" hidden></p>
     <p class="auth-msg ok" id="profileNotice" hidden></p>
+
+    <!-- diagnostics, shown only to the account that owns the project -->
+    <div class="profile-section" id="syncSection" hidden>
+      <h4>Sync status</h4>
+      <div id="syncStatus" class="sync">
+        <span class="sync-dot"></span>
+        <span id="syncText">Connecting…</span>
+      </div>
+      <p class="sync-detail" id="syncDetail"></p>
+    </div>
 
     <div class="profile-section">
       <button type="button" id="signOutBtn" class="danger-btn wide">Sign out</button>
