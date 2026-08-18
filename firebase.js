@@ -297,6 +297,12 @@ export async function cloudAddExpense(expense) {
   await setDoc(doc(expensesCol(), expense.id), expense);
 }
 
+/** Settling a category rewrites a whole batch of expenses at once. */
+export async function cloudSaveExpenses(expenses) {
+  if (!uid) return;
+  await writeExpensesInBatches(expenses);
+}
+
 export async function cloudDeleteExpense(id) {
   if (!uid) return;
   await deleteDoc(doc(expensesCol(), id));

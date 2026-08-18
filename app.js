@@ -9,7 +9,7 @@
 import {
   initCloud, cloudSaveSettings, cloudAddExpense, cloudDeleteExpense,
   cloudReplaceAll, cloudClearAll, cloudMigrate,
-  cloudSaveReceivable, cloudDeleteReceivable,
+  cloudSaveReceivable, cloudDeleteReceivable, cloudSaveExpenses,
   loginWithEmail, registerWithEmail, signInWithGoogle, continueAsGuest,
   resetPassword, signOutUser, changePassword, saveProfile,
   hasPasswordProvider, currentUser, authErrorMessage
@@ -76,7 +76,9 @@ function normalize(data) {
     ...e,
     id: String(e.id),
     amount: Number(e.amount) || 0,
-    createdAt: Number(e.createdAt) || Number(e.id) || 0
+    createdAt: Number(e.createdAt) || Number(e.id) || 0,
+    settled: e.settled === true,
+    settledOn: e.settledOn || ''
   }));
   data.receivables = (data.receivables || []).map((r) => ({
     ...r,
@@ -148,6 +150,11 @@ function expensesFor(key) {
   return state.expenses.filter((e) => monthOf(e.date) === key);
 }
 
+/** Expenses for a month that still count as spending. */
+function activeFor(key) {
+  return expensesFor(key).filter((e) => !e.settled);
+}
+
 function sum(list) {
   return list.reduce((total, e) => total + (Number(e.amount) || 0), 0);
 }
@@ -158,7 +165,11 @@ function renderMonthly() {
   const key = monthKey(viewDate);
   const income = incomeFor(key);
   const monthExpenses = expensesFor(key);
-  const spent = sum(monthExpenses);
+  // reimbursed money left your pocket and came back, so it is not spending
+  const active = monthExpenses.filter((e) => !e.settled);
+  const settled = monthExpenses.filter((e) => e.settled);
+  const spent = sum(active);
+  const settledTotal = sum(settled);
   const remaining = income - spent;
 
   $('monthLabel').textContent = `${MONTH_NAMES[viewDate.getMonth()]} ${viewDate.getFullYear()}`;
@@ -173,6 +184,7 @@ function renderMonthly() {
   $('mSpent').textContent = fmt(spent);
   $('mRemaining').textContent = fmt(remaining);
   $('mRemaining').classList.toggle('over', remaining < 0);
+  $('mSettled').textContent = fmt(settledTotal);
 
   const pct = income > 0 ? (spent / income) * 100 : (spent > 0 ? 100 : 0);
   const fill = $('progressFill');
@@ -182,12 +194,13 @@ function renderMonthly() {
     ? `${pct.toFixed(1)}% of budget used · ${remaining >= 0 ? fmt(remaining) + ' left' : fmt(Math.abs(remaining)) + ' over budget'}`
     : 'Set a monthly income to track your budget';
 
-  renderCalendar(key);
-  renderMonthList(monthExpenses);
-  renderBars($('categoryBreakdown'), groupBy(monthExpenses, 'category'), 'No expenses this month yet.');
+  renderCalendar(active);
+  renderMonthList(active);
+  renderSettled(settled, key);
+  renderBars($('categoryBreakdown'), groupBy(active, 'category'), 'No expenses this month yet.');
 }
 
-function renderCalendar(key) {
+function renderCalendar(active) {
   const cal = $('calendar');
   cal.innerHTML = '';
 
@@ -199,7 +212,7 @@ function renderCalendar(key) {
 
   // per-day totals for this month
   const totals = {};
-  for (const e of expensesFor(key)) {
+  for (const e of active) {
     totals[e.date] = (totals[e.date] || 0) + (Number(e.amount) || 0);
   }
 
@@ -279,6 +292,7 @@ function renderMonthList(list) {
           <strong>${fmt(total)}</strong>
           <small>${share.toFixed(1)}%</small>
         </span>
+        <button type="button" class="cat-settle" title="Mark this category as reimbursed">Settle</button>
       </summary>
       <span class="bar-track cat-bar"><span class="bar-fill" style="width:${share}%"></span></span>`;
 
@@ -290,6 +304,13 @@ function renderMonthList(list) {
     group.addEventListener('toggle', () => {
       if (group.open) collapsedCategories.delete(category);
       else collapsedCategories.add(category);
+    });
+
+    // the button lives inside a <summary>, which would otherwise fold the group
+    group.querySelector('.cat-settle').addEventListener('click', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      settleCategory(category, items, total);
     });
 
     box.appendChild(group);
@@ -327,7 +348,11 @@ function escapeHtml(str) {
 /* ---------------- totals tab ---------------- */
 
 function renderTotal() {
-  const totalSpent = sum(state.expenses);
+  // the totals tab has to agree with the monthly one, so settled is excluded
+  // from spending here as well
+  const active = state.expenses.filter((e) => !e.settled);
+  const totalSpent = sum(active);
+  const totalSettled = sum(state.expenses.filter((e) => e.settled));
 
   // months that matter: any month with an expense, plus any month with a saved income
   const keys = new Set(state.expenses.map((e) => monthOf(e.date)));
@@ -341,13 +366,14 @@ function renderTotal() {
   $('tNet').textContent = fmt(totalIncome - totalSpent);
   $('tNet').classList.toggle('over', totalIncome - totalSpent < 0);
   $('tCount').textContent = state.expenses.length;
+  $('tSettled').textContent = fmt(totalSettled);
 
   // spending by month
   const byMonth = {};
-  for (const k of sortedKeys) byMonth[monthTitle(k)] = sum(expensesFor(k));
+  for (const k of sortedKeys) byMonth[monthTitle(k)] = sum(activeFor(k));
   renderBars($('monthlyChart'), byMonth, 'Nothing recorded yet.', false);
 
-  renderBars($('totalCategory'), groupBy(state.expenses, 'category'), 'Nothing recorded yet.');
+  renderBars($('totalCategory'), groupBy(active, 'category'), 'Nothing recorded yet.');
 
   // summary table
   const body = $('summaryBody');
@@ -359,7 +385,7 @@ function renderTotal() {
 
   for (const k of [...sortedKeys].reverse()) {
     const income = incomeFor(k);
-    const list = expensesFor(k);
+    const list = activeFor(k);
     const spent = sum(list);
     const remaining = income - spent;
     const tr = document.createElement('tr');
@@ -489,6 +515,84 @@ function renderModalList() {
     return;
   }
   for (const e of list) box.appendChild(entryRow(e, { showDate: false }));
+}
+
+function renderSettled(settled, key) {
+  const card = $('settledCard');
+  card.hidden = !settled.length;
+  if (!settled.length) return;
+
+  $('settledTotalPill').textContent = fmt(sum(settled));
+
+  const groups = new Map();
+  for (const e of settled) {
+    const cat = e.category || 'Other';
+    if (!groups.has(cat)) groups.set(cat, []);
+    groups.get(cat).push(e);
+  }
+
+  const box = $('settledList');
+  box.innerHTML = '';
+  for (const [category, items] of [...groups.entries()].sort((a, b) => sum(b[1]) - sum(a[1]))) {
+    const total = sum(items);
+    const when = items.map((e) => e.settledOn).filter(Boolean).sort().pop();
+
+    const group = document.createElement('details');
+    group.className = 'cat-group settled-group';
+    group.open = false;   // archived, so folded until asked for
+    group.innerHTML = `
+      <summary class="cat-head">
+        <span class="cat-caret" aria-hidden="true">›</span>
+        <span class="cat-name">${escapeHtml(category)}</span>
+        <span class="pill cat-count">${items.length}</span>
+        <span class="cat-figures">
+          <strong class="muted-strong">${fmt(total)}</strong>
+          <small>${when ? 'settled ' + prettyDate(when) : 'settled'}</small>
+        </span>
+        <button type="button" class="cat-settle undo" title="Put these back into this month's spending">Undo</button>
+      </summary>`;
+
+    const body = document.createElement('div');
+    body.className = 'cat-body';
+    for (const e of items) body.appendChild(entryRow(e, { showCategory: false }));
+    group.appendChild(body);
+
+    group.querySelector('.cat-settle').addEventListener('click', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      unsettleCategory(category, items);
+    });
+
+    box.appendChild(group);
+  }
+}
+
+/**
+ * Marks every entry in one category, for the month on screen, as reimbursed.
+ * They stop counting toward spending but stay on record.
+ */
+function settleCategory(category, items, total) {
+  const month = `${MONTH_NAMES[viewDate.getMonth()]} ${viewDate.getFullYear()}`;
+  const question = `Mark ${items.length} ${category} ${items.length === 1 ? 'entry' : 'entries'} `
+    + `(${fmt(total)}) in ${month} as settled?
+
+`
+    + 'They will stop counting toward this month’s spending, which frees up that much budget.';
+  if (!confirm(question)) return;
+
+  const today = dateKey(new Date());
+  const changed = items.map((e) => Object.assign(e, { settled: true, settledOn: today }));
+  save();
+  renderAll();
+  push(() => cloudSaveExpenses(changed));
+}
+
+function unsettleCategory(category, items) {
+  if (!confirm(`Put ${items.length} ${category} ${items.length === 1 ? 'entry' : 'entries'} back into this month’s spending?`)) return;
+  const changed = items.map((e) => Object.assign(e, { settled: false, settledOn: '' }));
+  save();
+  renderAll();
+  push(() => cloudSaveExpenses(changed));
 }
 
 /* ---------------- to-receive tab ---------------- */

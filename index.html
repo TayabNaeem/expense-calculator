@@ -177,6 +177,10 @@
         <span class="stat-label">Remaining budget</span>
         <span class="stat-value good" id="mRemaining">—</span>
       </div>
+      <div class="stat">
+        <span class="stat-label">Settled / reimbursed</span>
+        <span class="stat-value muted-stat" id="mSettled">—</span>
+      </div>
     </div>
 
     <div class="progress-wrap">
@@ -210,6 +214,15 @@
       <div id="monthList" class="entries"></div>
     </div>
 
+    <div class="list-card" id="settledCard" hidden>
+      <div class="list-head">
+        <h3>Settled this month</h3>
+        <span class="pill" id="settledTotalPill">₨0</span>
+      </div>
+      <p class="hint settled-hint">Reimbursed — not counted in this month's spending.</p>
+      <div id="settledList" class="entries grouped"></div>
+    </div>
+
     <div class="breakdown-card">
       <h3>Category breakdown</h3>
       <div id="categoryBreakdown" class="bars"></div>
@@ -234,6 +247,10 @@
       <div class="stat">
         <span class="stat-label">Total entries</span>
         <span class="stat-value" id="tCount">—</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Settled / reimbursed</span>
+        <span class="stat-value muted-stat" id="tSettled">—</span>
       </div>
     </div>
 

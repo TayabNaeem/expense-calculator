@@ -763,3 +763,34 @@ body.booting .auth-screen, body.booting #appShell { visibility: hidden; }
   .cat-figures small { min-width: 36px; }
   .cat-body { padding: 8px 9px 10px; }
 }
+
+/* ---------- settled categories ---------- */
+.stat-value.muted-stat { color: var(--muted); }
+
+.cat-settle {
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 5px 11px;
+  font-size: 11.5px;
+  font-family: inherit;
+  cursor: pointer;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.cat-settle:hover { border-color: var(--good); color: var(--good); }
+.cat-settle.undo:hover { border-color: var(--accent); color: var(--accent); }
+
+.settled-hint { text-align: left; margin: -6px 0 14px; }
+
+.settled-group { opacity: .78; }
+.settled-group .cat-head { background: rgba(61, 220, 151, .05); }
+.settled-group .entry-amt { color: var(--muted); }
+.muted-strong { color: var(--muted) !important; }
+
+@media (max-width: 560px) {
+  .cat-settle { padding: 4px 8px; font-size: 11px; }
+  .cat-head { flex-wrap: wrap; }
+  .cat-figures { margin-left: auto; }
+}

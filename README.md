@@ -13,6 +13,10 @@ A clean, no-signup expense tracker. Set your monthly income, tap a date on the c
 - Budget progress bar that turns red when you go over
 - Expense list grouped by category, each with its total, share and count —
   fold a category away, or switch to one flat list
+- Settle a whole category once you are reimbursed for it: those entries stop
+  counting toward the month's spending and that much budget is freed, while
+  the entries stay on record in a "Settled this month" section and can be
+  put back at any time
 - Category breakdown for the month
 - Move to any month with the ‹ › arrows
 
@@ -83,7 +87,8 @@ step 2, which is why getting those right matters.
 ```
 users/{uid}                 -> { currency, defaultIncome, incomes,
                                  displayName, photo }
-users/{uid}/expenses/{id}   -> { date, amount, category, note, createdAt }
+users/{uid}/expenses/{id}   -> { date, amount, category, note, createdAt,
+                                 settled, settledOn }
 users/{uid}/receivables/{id}
                             -> { person, amount, note, date, createdAt,
                                  payments: [{ id, amount, date }] }
