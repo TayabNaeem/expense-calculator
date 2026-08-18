@@ -4,67 +4,38 @@ A clean, no-signup expense tracker. Set your monthly income, tap a date on the c
 
 ## Features
 
-**Monthly Expense tab**
-- Set a total income per month, or one default income that applies to every month
-- Calendar view for the month — each day shows what you spent on it
-- Click any date to add an expense (amount, category, optional note)
-- Every expense is subtracted from that month's budget in real time
-- Live stats: income, spent this month, remaining budget
-- Budget progress bar that turns red when you go over
-- Expense list grouped by category, each with its total, share and count —
-  fold a category away, or switch to one flat list
-- Settle a whole category once you are reimbursed for it: those entries stop
-  counting toward the month's spending and that much budget is freed, while
-  the entries stay on record in a "Settled this month" section and can be
-  put back at any time
-- Donut chart of the month with a colour-coded legend
-- Per-category monthly budgets with progress bars that warn near the limit
-  and turn red past it
-- Category breakdown for the month
-- Move to any month with the ‹ › arrows
+Four pages, following the layout of the reference app.
 
-**Total Expenses Till Now tab**
-- All-time totals: expenses, income, net savings, number of entries
-- Spending by month
-- All-time category breakdown
-- Month-by-month summary table
+**Home**
+- What you have: every account with its balance and a combined net figure
+- Your monthly expense: donut chart with a colour-coded legend
+- Your budget: a monthly cap per category, amber near the limit and red past it
 
-**Accounts tab**
-- Track what you hold across several accounts, with a combined net figure
-- Charge an expense to an account and its balance moves automatically
-- Reimbursed expenses are added back, so a settled expense costs nothing
+**Money**
+- Salary for the month, or one default that applies to every month
+- Calendar view where each day shows what went out on it
+- Click a date, or the floating + button, to log an expense
+- Expenses grouped by category, foldable, sortable by date
+- Settle a category once you are reimbursed for it
 
-**Insights tab**
+**Insights**
 - This month against last, with the direction of travel
 - Average and highest month, busiest category, average spend per day
-- Category-by-category comparison and a six month trend
+- Category comparison, six month trend, and the all-time totals
 
-**Sign in**
-- Register with email and password, or continue with Google
-- Password reset by email, and change-password from the profile panel
-- Profile photo upload and editable display name
-- Guest mode for trying it without signing up — registering later upgrades
-  the guest account in place, so nothing logged as a guest is lost
-- Sign out clears the local cache, so a shared device never shows the
-  previous person's figures
+**Savings**
+- What is in the savings account
+- Salary received, spent, and kept, all time
+- Money owed to you, with part payments recorded against each person
 
-**To Receive tab**
-- Log money someone owes you: person, amount, date given, and a note saying what it was for
-- Open an entry to record part payments as they come in
-- Each payment is kept with its date, so you get a running history
-- Remaining balance and a progress bar update as you go; entries mark themselves settled
-- "Mark fully received" closes out whatever is left in one tap
-- Filter by not-settled, settled, or all
+**Accounts and salary**
 
-**Extras**
-- Every entry is saved to Firebase (Cloud Firestore) in real time
-- Works offline — changes queue locally and upload when you reconnect
-- Optional Google sign-in to sync the same data across your phone and laptop
-- Currency picker (PKR, INR, USD, EUR, GBP, AED, SAR)
-- Export / import your data as a JSON backup
-- Fully responsive — works on phone and desktop
+Mark one account as *salary* and one as *savings*. Salary is credited to its
+account, and expenses come out of it by default, so the balance tracks what is
+actually left. Naming a different account on an expense overrides that.
 
-Categories: Petrol, Lunch, Dinner, House, Bike, Given to someone, Office expense, Load, Manna, Other.
+Categories: Home, Family, Food and drink, Petrol, Office expense, Personal,
+Love, Mobile topup.
 
 ## Firebase setup (required)
 
@@ -98,8 +69,9 @@ step 2, which is why getting those right matters.
 ### How data is stored
 
 ```
-users/{uid}                 -> { currency, defaultIncome, incomes,
-                                 budgets, accounts, displayName, photo }
+users/{uid}                 -> { currency, defaultIncome, incomes, budgets,
+                                 accounts: [{ id, name, openingBalance, type }],
+                                 displayName, photo }
 users/{uid}/expenses/{id}   -> { date, amount, category, note, createdAt,
                                  settled, settledOn, accountId }
 users/{uid}/receivables/{id}

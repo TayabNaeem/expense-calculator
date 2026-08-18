@@ -133,17 +133,99 @@
 <div id="banner" class="banner" hidden><span id="bannerText"></span></div>
 
 <nav class="tabs" role="tablist">
-  <button class="tab active" role="tab" data-tab="monthly">Monthly Expense</button>
-  <button class="tab" role="tab" data-tab="total">Total Expenses Till Now</button>
-  <button class="tab" role="tab" data-tab="accounts">Accounts</button>
-  <button class="tab" role="tab" data-tab="receivable">To Receive</button>
-  <button class="tab" role="tab" data-tab="insights">Insights</button>
+  <button class="tab active" role="tab" data-tab="home">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>
+    <span>Home</span>
+  </button>
+  <button class="tab" role="tab" data-tab="money">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v10M14.5 9.4c-.4-.8-1.3-1.3-2.5-1.3-1.5 0-2.6.9-2.6 2s1.1 2 2.6 2 2.6.9 2.6 2-1.1 2-2.6 2c-1.2 0-2.1-.5-2.5-1.3"/></svg>
+    <span>Money</span>
+  </button>
+  <button class="tab" role="tab" data-tab="insights">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+    <span>Insights</span>
+  </button>
+  <button class="tab" role="tab" data-tab="savings">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 9h13a4 4 0 0 1 0 8h-1v3h-3v-3H8v3H5v-4a6 6 0 0 1-1-9z"/><circle cx="8.5" cy="12.5" r="1"/></svg>
+    <span>Savings</span>
+  </button>
 </nav>
 
 <main>
   <!-- ============ MONTHLY TAB ============ -->
-  <section id="panel-monthly" class="panel active" role="tabpanel">
+    <!-- ============ HOME ============ -->
+  <section id="panel-home" class="panel active" role="tabpanel">
+    <div class="net-card">
+      <span class="net-label">What you have</span>
+      <span class="net-value" id="netWorth">—</span>
+      <span class="net-sub" id="netSub">across all accounts</span>
+    </div>
 
+    <div class="account-grid" id="accountGrid"></div>
+
+    <div class="income-card">
+      <h3>Add an account</h3>
+      <form id="accountForm" class="account-form">
+        <div class="field">
+          <label for="accName">Account name</label>
+          <input type="text" id="accName" maxlength="40" placeholder="e.g. Allied Bank" required />
+        </div>
+        <div class="field">
+          <label for="accBalance">Opening balance</label>
+          <input type="number" id="accBalance" step="any" placeholder="0" inputmode="decimal" required />
+        </div>
+        <div class="field">
+          <label for="accType">Account type</label>
+          <select id="accType">
+            <option value="salary">Salary — pays the expenses</option>
+            <option value="savings">Savings</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+        <button type="submit" class="primary-btn">Add account</button>
+      </form>
+      <p class="hint accounts-hint">
+        An account's balance is its opening balance minus any expense you charge to it.
+        Reimbursed expenses are added back.
+      </p>
+    </div>
+        <div class="breakdown-card">
+      <h3>Your monthly expense</h3>
+      <div class="donut-wrap">
+        <div class="donut-chart">
+          <svg id="donut" viewBox="0 0 200 200" role="img" aria-label="Spending by category"></svg>
+          <div class="donut-centre">
+            <span class="donut-total" id="donutTotal">—</span>
+            <span class="donut-caption">this month</span>
+          </div>
+        </div>
+        <div class="donut-legend" id="donutLegend"></div>
+      </div>
+    </div>
+
+    <div class="list-card">
+      <div class="list-head">
+        <h3>Your budget</h3>
+        <span class="pill" id="budgetSummary">No budgets set</span>
+      </div>
+      <form id="budgetForm" class="budget-form">
+        <div class="field">
+          <label for="budgetCategory">Category</label>
+          <select id="budgetCategory"></select>
+        </div>
+        <div class="field">
+          <label for="budgetAmount">Monthly limit</label>
+          <input type="number" id="budgetAmount" min="0" step="any" placeholder="0" inputmode="decimal" required />
+        </div>
+        <button type="submit" class="primary-btn">Set budget</button>
+      </form>
+      <div id="budgetList" class="budget-list"></div>
+    </div>
+  </section>
+
+
+  <!-- ============ MONEY ============ -->
+  <section id="panel-money" class="panel" role="tabpanel">
     <div class="month-nav">
       <button id="prevMonth" class="nav-btn" aria-label="Previous month">‹</button>
       <div class="month-title">
@@ -224,48 +306,62 @@
       <p class="hint settled-hint">Reimbursed — not counted in this month's spending.</p>
       <div id="settledList" class="entries grouped"></div>
     </div>
-
-    <div class="breakdown-card">
-      <h3>Where the money went</h3>
-      <div class="donut-wrap">
-        <div class="donut-chart">
-          <svg id="donut" viewBox="0 0 200 200" role="img" aria-label="Spending by category"></svg>
-          <div class="donut-centre">
-            <span class="donut-total" id="donutTotal">—</span>
-            <span class="donut-caption">this month</span>
-          </div>
-        </div>
-        <div class="donut-legend" id="donutLegend"></div>
-      </div>
-    </div>
-
     <div class="breakdown-card">
       <h3>Category breakdown</h3>
       <div id="categoryBreakdown" class="bars"></div>
-    </div>
+    </div>  </section>
 
-    <div class="list-card">
-      <div class="list-head">
-        <h3>Your budget</h3>
-        <span class="pill" id="budgetSummary">No budgets set</span>
+  <!-- ============ INSIGHTS ============ -->
+  <section id="panel-insights" class="panel" role="tabpanel">
+    <div class="stats">
+      <div class="stat">
+        <span class="stat-label">This month</span>
+        <span class="stat-value danger" id="iThisMonth">—</span>
       </div>
-      <form id="budgetForm" class="budget-form">
-        <div class="field">
-          <label for="budgetCategory">Category</label>
-          <select id="budgetCategory"></select>
-        </div>
-        <div class="field">
-          <label for="budgetAmount">Monthly limit</label>
-          <input type="number" id="budgetAmount" min="0" step="any" placeholder="0" inputmode="decimal" required />
-        </div>
-        <button type="submit" class="primary-btn">Set budget</button>
-      </form>
-      <div id="budgetList" class="budget-list"></div>
+      <div class="stat">
+        <span class="stat-label">Last month</span>
+        <span class="stat-value" id="iLastMonth">—</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Change</span>
+        <span class="stat-value" id="iChange">—</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Average per day</span>
+        <span class="stat-value" id="iDaily">—</span>
+      </div>
     </div>
-  </section>
 
-  <!-- ============ TOTAL TAB ============ -->
-  <section id="panel-total" class="panel" role="tabpanel">
+    <div class="breakdown-card">
+      <h3>Monthly average</h3>
+      <div class="stats inner">
+        <div class="stat">
+          <span class="stat-label">Average month</span>
+          <span class="stat-value" id="iAvgMonth">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Highest month</span>
+          <span class="stat-value" id="iPeak">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Busiest category</span>
+          <span class="stat-value" id="iTopCat">—</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="breakdown-card">
+      <h3>How this month compares, by category</h3>
+      <div id="insightCompare" class="compare-rows"></div>
+    </div>
+
+    <div class="breakdown-card">
+      <h3>Last six months</h3>
+      <div id="trendChart" class="trend"></div>
+    </div>
+  
+
+    <h2 class="section-heading">Total expenses till now</h2>
     <div class="stats big">
       <div class="stat">
         <span class="stat-label">Total expenses till now</span>
@@ -318,88 +414,34 @@
     </div>
   </section>
 
-  <!-- ============ ACCOUNTS TAB ============ -->
-  <section id="panel-accounts" class="panel" role="tabpanel">
-    <div class="net-card">
-      <span class="net-label">What you have</span>
-      <span class="net-value" id="netWorth">—</span>
-      <span class="net-sub" id="netSub">across all accounts</span>
+  <!-- ============ SAVINGS ============ -->
+  <section id="panel-savings" class="panel" role="tabpanel">
+    <div class="net-card savings-card">
+      <span class="net-label">In savings</span>
+      <span class="net-value" id="savingsBalance">—</span>
+      <span class="net-sub" id="savingsSub">no savings account yet</span>
     </div>
 
-    <div class="account-grid" id="accountGrid"></div>
-
-    <div class="income-card">
-      <h3>Add an account</h3>
-      <form id="accountForm" class="account-form">
-        <div class="field">
-          <label for="accName">Account name</label>
-          <input type="text" id="accName" maxlength="40" placeholder="e.g. Allied Bank" required />
-        </div>
-        <div class="field">
-          <label for="accBalance">Opening balance</label>
-          <input type="number" id="accBalance" step="any" placeholder="0" inputmode="decimal" required />
-        </div>
-        <button type="submit" class="primary-btn">Add account</button>
-      </form>
-      <p class="hint accounts-hint">
-        An account's balance is its opening balance minus any expense you charge to it.
-        Reimbursed expenses are added back.
-      </p>
-    </div>
-  </section>
-
-  <!-- ============ INSIGHTS TAB ============ -->
-  <section id="panel-insights" class="panel" role="tabpanel">
     <div class="stats">
       <div class="stat">
-        <span class="stat-label">This month</span>
-        <span class="stat-value danger" id="iThisMonth">—</span>
+        <span class="stat-label">Salary received</span>
+        <span class="stat-value" id="sIncome">—</span>
       </div>
       <div class="stat">
-        <span class="stat-label">Last month</span>
-        <span class="stat-value" id="iLastMonth">—</span>
+        <span class="stat-label">Spent all time</span>
+        <span class="stat-value danger" id="sSpent">—</span>
       </div>
       <div class="stat">
-        <span class="stat-label">Change</span>
-        <span class="stat-value" id="iChange">—</span>
+        <span class="stat-label">Kept</span>
+        <span class="stat-value good" id="sKept">—</span>
       </div>
       <div class="stat">
-        <span class="stat-label">Average per day</span>
-        <span class="stat-value" id="iDaily">—</span>
+        <span class="stat-label">Still owed to you</span>
+        <span class="stat-value" id="sOwed">—</span>
       </div>
     </div>
 
-    <div class="breakdown-card">
-      <h3>Monthly average</h3>
-      <div class="stats inner">
-        <div class="stat">
-          <span class="stat-label">Average month</span>
-          <span class="stat-value" id="iAvgMonth">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Highest month</span>
-          <span class="stat-value" id="iPeak">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-label">Busiest category</span>
-          <span class="stat-value" id="iTopCat">—</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="breakdown-card">
-      <h3>How this month compares, by category</h3>
-      <div id="insightCompare" class="compare-rows"></div>
-    </div>
-
-    <div class="breakdown-card">
-      <h3>Last six months</h3>
-      <div id="trendChart" class="trend"></div>
-    </div>
-  </section>
-
-  <!-- ============ TO RECEIVE TAB ============ -->
-  <section id="panel-receivable" class="panel" role="tabpanel">
+    <h2 class="section-heading">Money owed to you</h2>
     <div class="stats">
       <div class="stat">
         <span class="stat-label">Still to receive</span>
@@ -456,8 +498,11 @@
       </div>
       <div id="receivableList" class="entries"></div>
     </div>
+  
   </section>
 </main>
+
+<button type="button" id="fab" class="fab" title="Add an expense" aria-label="Add an expense">+</button>
 
 <footer class="foot">Entries are saved to your own Firebase account and cached in this browser, so it keeps working offline.</footer>
 </div><!-- /appShell -->
@@ -482,16 +527,14 @@
       <div class="field">
         <label for="expCategory">Category</label>
         <select id="expCategory">
+          <option>Home</option>
+          <option>Family</option>
+          <option>Food and drink</option>
           <option>Petrol</option>
-          <option>Lunch</option>
-          <option>Dinner</option>
-          <option>House</option>
-          <option>Bike</option>
-          <option>Given to someone</option>
           <option>Office expense</option>
-          <option>Load</option>
-          <option>Manna</option>
-          <option>Other</option>
+          <option>Personal</option>
+          <option>Love</option>
+          <option>Mobile topup</option>
         </select>
       </div>
       <div class="field">
@@ -645,6 +688,14 @@
       <div class="field">
         <label for="accEditBalance">Opening balance</label>
         <input type="number" id="accEditBalance" step="any" required />
+      </div>
+      <div class="field wide">
+        <label for="accEditType">Account type</label>
+        <select id="accEditType">
+          <option value="salary">Salary — pays the expenses</option>
+          <option value="savings">Savings</option>
+          <option value="other">Other</option>
+        </select>
       </div>
       <button type="submit" class="primary-btn wide">Save changes</button>
     </form>

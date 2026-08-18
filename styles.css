@@ -942,3 +942,53 @@ body.booting .auth-screen, body.booting #appShell { visibility: hidden; }
   .net-value { font-size: 25px; }
   .trend { gap: 6px; min-height: 150px; }
 }
+
+/* ---------- nav with icons, matching the reference app ---------- */
+.tab { display: flex; align-items: center; justify-content: center; gap: 8px; }
+.tab svg { width: 18px; height: 18px; flex-shrink: 0; }
+
+/* ---------- floating add button ---------- */
+.fab {
+  position: fixed;
+  left: 50%; transform: translateX(-50%);
+  bottom: 22px;
+  width: 58px; height: 58px;
+  border: 0; border-radius: 50%;
+  background: linear-gradient(140deg, var(--accent), var(--accent-2));
+  color: var(--on-accent);
+  font-size: 30px; line-height: 1;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 8px 22px rgba(20, 128, 141, .4);
+  z-index: 40;
+  transition: .16s;
+}
+.fab:hover { transform: translateX(-50%) translateY(-2px); box-shadow: 0 12px 26px rgba(20, 128, 141, .45); }
+
+/* ---------- page headings ---------- */
+.section-heading {
+  margin: 26px 0 14px;
+  font-size: 16px;
+  letter-spacing: -.2px;
+}
+
+/* ---------- account kinds ---------- */
+.account-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.account-badge {
+  font-size: 10px; text-transform: uppercase; letter-spacing: .5px;
+  background: rgba(20, 128, 141, .10);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: 99px; padding: 1px 7px;
+}
+.account-card.savings { border-left-color: var(--good); }
+.account-card.savings .account-badge { background: rgba(18, 153, 107, .10); border-color: var(--good); color: var(--good); }
+.account-card.savings .account-balance { color: var(--good); }
+.account-card.negative .account-balance { color: var(--danger); }
+
+.savings-card { background: linear-gradient(140deg, var(--good), #1fb37f); box-shadow: 0 8px 22px rgba(18, 153, 107, .25); }
+
+.net-value.over { color: #ffe3e3; }
+
+/* keep the last card clear of the floating button */
+main { padding-bottom: 92px; }

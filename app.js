@@ -96,6 +96,7 @@ function normalize(data) {
     id: String(a.id),
     name: a.name || 'Account',
     openingBalance: Number(a.openingBalance) || 0,
+    type: a.type || 'other',
     createdAt: Number(a.createdAt) || 0
   }));
   data.budgets = data.budgets || {};
@@ -377,11 +378,8 @@ function renderTotal() {
   const totalSettled = sum(state.expenses.filter((e) => e.settled));
 
   // months that matter: any month with an expense, plus any month with a saved income
-  const keys = new Set(state.expenses.map((e) => monthOf(e.date)));
-  Object.keys(state.incomes).forEach((k) => keys.add(k));
-  const sortedKeys = [...keys].sort();
-
-  const totalIncome = sortedKeys.reduce((total, k) => total + incomeFor(k), 0);
+  const sortedKeys = activeMonths();
+  const totalIncome = totalIncomeTillNow();
 
   $('tSpent').textContent = fmt(totalSpent);
   $('tIncome').textContent = fmt(totalIncome);
@@ -461,6 +459,11 @@ function renderBars(container, data, emptyMsg, sortDesc = true) {
 /* ---------------- expense actions ---------------- */
 
 function addExpense(date, amount, category, note, accountId = '') {
+  // an expense with no account named still has to come from somewhere
+  if (!accountId) {
+    const salary = salaryAccount();
+    if (salary) accountId = salary.id;
+  }
   const expense = {
     id: newId(),
     date,
@@ -746,8 +749,33 @@ function spentFromAccount(id) {
   return sum(state.expenses.filter((e) => e.accountId === id && !e.settled));
 }
 
+/** The account salary is paid into, and that expenses come out of by default. */
+function salaryAccount() {
+  return state.accounts.find((a) => a.type === 'salary') || null;
+}
+
+function savingsAccount() {
+  return state.accounts.find((a) => a.type === 'savings') || null;
+}
+
+/**
+ * Every month that has an income figure or any spending. Months with neither
+ * are ignored, so an unbounded default income cannot inflate the total.
+ */
+function activeMonths() {
+  const keys = new Set(state.expenses.map((e) => monthOf(e.date)));
+  Object.keys(state.incomes).forEach((k) => keys.add(k));
+  return [...keys].sort();
+}
+
+function totalIncomeTillNow() {
+  return activeMonths().reduce((t, k) => t + incomeFor(k), 0);
+}
+
 function balanceOf(account) {
-  return account.openingBalance - spentFromAccount(account.id);
+  // salary is credited to its account; everything else starts from its opening
+  const credited = account.type === 'salary' ? totalIncomeTillNow() : 0;
+  return account.openingBalance + credited - spentFromAccount(account.id);
 }
 
 function renderAccounts() {
@@ -770,9 +798,14 @@ function renderAccounts() {
     const spent = spentFromAccount(account.id);
     const card = document.createElement('button');
     card.type = 'button';
-    card.className = 'account-card' + (balance < 0 ? ' negative' : '');
+    card.className = 'account-card ' + account.type + (balance < 0 ? ' negative' : '');
+    const badge = account.type === 'salary' ? 'Salary'
+      : account.type === 'savings' ? 'Savings' : '';
     card.innerHTML =
-      '<span class="account-name">' + escapeHtml(account.name) + '</span>' +
+      '<span class="account-top">' +
+        '<span class="account-name">' + escapeHtml(account.name) + '</span>' +
+        (badge ? '<span class="account-badge">' + badge + '</span>' : '') +
+      '</span>' +
       '<span class="account-balance">' + fmt(balance) + '</span>' +
       '<span class="account-meta">' + (spent > 0 ? fmt(spent) + ' spent' : 'nothing spent yet') + '</span>';
     card.addEventListener('click', () => openAccount(account.id));
@@ -793,10 +826,13 @@ function refreshAccountPicker() {
   for (const account of state.accounts) {
     const option = document.createElement('option');
     option.value = account.id;
-    option.textContent = account.name;
+    option.textContent = account.name + (account.type === 'salary' ? ' (salary)' : '');
     select.appendChild(option);
   }
-  if (chosen) select.value = chosen;
+
+  // spending comes out of the salary account unless told otherwise
+  const salary = salaryAccount();
+  select.value = chosen || (salary ? salary.id : '');
 }
 
 function currentAccount() {
@@ -825,6 +861,12 @@ function renderAccountModal() {
   $('accCurrent').textContent = fmt(balanceOf(account));
   if (document.activeElement !== $('accEditName')) $('accEditName').value = account.name;
   if (document.activeElement !== $('accEditBalance')) $('accEditBalance').value = account.openingBalance;
+  if (document.activeElement !== $('accEditType')) $('accEditType').value = account.type;
+
+  const credited = account.type === 'salary' ? totalIncomeTillNow() : 0;
+  $('accOpening').textContent = credited
+    ? fmt(account.openingBalance) + ' + ' + fmt(credited) + ' salary'
+    : fmt(account.openingBalance);
 
   const charged = state.expenses
     .filter((e) => e.accountId === account.id)
@@ -838,6 +880,27 @@ function renderAccountModal() {
     return;
   }
   for (const e of charged) box.appendChild(entryRow(e));
+}
+
+/* ---------------- savings ---------------- */
+
+function renderSavings() {
+  const savings = savingsAccount();
+  $('savingsBalance').textContent = savings ? fmt(balanceOf(savings)) : fmt(0);
+  $('savingsBalance').classList.toggle('over', savings ? balanceOf(savings) < 0 : false);
+  $('savingsSub').textContent = savings
+    ? savings.name
+    : 'Add an account on Home and mark it as Savings';
+
+  const income = totalIncomeTillNow();
+  const spent = sum(state.expenses.filter((e) => !e.settled));
+  const owed = state.receivables.reduce((t, r) => t + remainingOf(r), 0);
+
+  $('sIncome').textContent = fmt(income);
+  $('sSpent').textContent = fmt(spent);
+  $('sKept').textContent = fmt(income - spent);
+  $('sKept').classList.toggle('over', income - spent < 0);
+  $('sOwed').textContent = fmt(owed);
 }
 
 /* ---------------- insights ---------------- */
@@ -1126,6 +1189,7 @@ function renderAll() {
   renderTotal();
   renderReceivables();
   renderAccounts();
+  renderSavings();
   renderInsights();
   if (openAccountId) renderAccountModal();
 }
@@ -1219,7 +1283,10 @@ $('accountForm').addEventListener('submit', (e) => {
   if (!name) return alert('Please give the account a name.');
   if (Number.isNaN(balance)) return alert('Please enter an opening balance.');
 
-  state.accounts.push({ id: newId(), name, openingBalance: balance, createdAt: Date.now() });
+  state.accounts.push({
+    id: newId(), name, openingBalance: balance,
+    type: $('accType').value, createdAt: Date.now()
+  });
   e.target.reset();
   saveSettings();
   renderAll();
@@ -1237,6 +1304,7 @@ $('accountEditForm').addEventListener('submit', (e) => {
 
   account.name = name;
   account.openingBalance = balance;
+  account.type = $('accEditType').value;
   saveSettings();
   renderAll();
 });
@@ -1260,6 +1328,8 @@ $('deleteAccountBtn').addEventListener('click', () => {
   renderAll();
   if (orphaned.length) push(() => cloudSaveExpenses(orphaned));
 });
+
+$('fab').addEventListener('click', () => openModal(dateKey(new Date())));
 
 $('closeAccountModal').addEventListener('click', closeAccountModal);
 $('accountModal').addEventListener('click', (e) => {
