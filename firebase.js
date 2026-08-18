@@ -154,10 +154,11 @@ function reportError(err) {
   console.error('[firebase]', err);
   handlers.onStatus({
     state: 'error',
+    code: err.code,
     // permission-denied almost always means the Firestore rules were never
     // updated from the default deny-all
     message: err.code === 'permission-denied'
-      ? 'Firestore rules are blocking access — publish the rules from firestore.rules in the repo.'
+      ? 'Firestore rules are blocking access — publish the current firestore.rules, which now cover the receivables collection too.'
       : authErrorMessage(err),
     user: auth.currentUser
   });

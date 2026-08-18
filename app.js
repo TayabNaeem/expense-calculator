@@ -804,6 +804,10 @@ function showBanner(message) {
   $('banner').hidden = false;
 }
 
+function hideBanner() {
+  $('banner').hidden = true;
+}
+
 function setStatus(kind, label, detail) {
   const el = $('syncStatus');
   el.className = 'sync ' + kind;
@@ -849,7 +853,7 @@ initCloud({
     if (modalDate) renderModalList();
   },
 
-  onStatus({ state: kind, message, user }) {
+  onStatus({ state: kind, message, code, user }) {
     if (kind === 'signed-out') {
       showAuthScreen();
       return;
@@ -859,18 +863,26 @@ initCloud({
     $('syncSection').hidden = !isOwner(user);
 
     if (kind === 'synced') {
+      // a recovered connection has to clear any warning left on screen
+      hideBanner();
       setStatus('ok', user && user.isAnonymous ? 'Synced (guest)' : 'Synced',
         user && user.isAnonymous
           ? 'Guest account — create an account to keep this data if you clear your browser.'
           : `Signed in as ${user.email || user.displayName}`);
     } else if (kind === 'offline') {
+      hideBanner();
       setStatus('warn', 'Offline', 'Showing cached data. Changes will upload when you reconnect.');
     } else if (kind === 'error') {
       setStatus('bad', 'Sync error', message);
-      // the setup-specific wording only helps whoever administers the project
+      // the setup-specific wording only helps whoever administers the project.
+      // a rejected request is not a dropped connection — promising it will
+      // upload later would be a lie, so say something true instead.
+      const blocked = code === 'permission-denied' || String(code || '').startsWith('auth/');
       showBanner(isOwner(user)
         ? message
-        : 'Could not reach the server. Your entries are saved on this device and will upload once you are back online.');
+        : blocked
+          ? 'Syncing is unavailable at the moment. Your entries are saved on this device.'
+          : 'Could not reach the server. Your entries are saved on this device and will upload once you are back online.');
     } else {
       setStatus('', 'Connecting…');
     }
@@ -884,6 +896,7 @@ function showAuthScreen() {
   document.body.classList.remove('booting');
   $('authScreen').hidden = false;
   $('appShell').hidden = true;
+  hideBanner();
 
   // never leave one account's figures on screen for the next person
   state = defaultState();
