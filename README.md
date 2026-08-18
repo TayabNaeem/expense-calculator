@@ -9,7 +9,7 @@ A clean, no-signup expense tracker. Set your monthly income, tap a date on the c
 - Calendar view for the month — each day shows what you spent on it
 - Click any date to add an expense (amount, category, optional note)
 - Every expense is subtracted from that month's budget in real time
-- Live stats: income, spent, remaining budget, daily average
+- Live stats: income, spent this month, remaining budget
 - Budget progress bar that turns red when you go over
 - Category breakdown for the month
 - Move to any month with the ‹ › arrows
