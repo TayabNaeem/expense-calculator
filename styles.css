@@ -1,4 +1,8 @@
 :root {
+  /* renders native controls dark — number spinners, date pickers, select
+     popups and scrollbars — instead of the browser's light defaults */
+  color-scheme: dark;
+
   --bg: #0f1117;
   --bg-2: #161923;
   --bg-3: #1d212e;
@@ -181,7 +185,14 @@ input[type="number"], input[type="text"], input[type="date"], select {
   outline: none;
 }
 input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(108, 140, 255, .16); }
-input[type="date"] { color-scheme: dark; }
+/* the spinner is drawn by the browser; color-scheme on :root is what makes
+   it transparent with a light glyph, so only the spacing is ours */
+input[type="number"]::-webkit-inner-spin-button {
+  opacity: .55;
+  margin-left: 4px;
+}
+input[type="number"]:hover::-webkit-inner-spin-button,
+input[type="number"]:focus::-webkit-inner-spin-button { opacity: 1; }
 
 .primary-btn {
   background: linear-gradient(140deg, var(--accent), var(--accent-2));
