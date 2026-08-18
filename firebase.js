@@ -337,7 +337,9 @@ export async function cloudClearAll() {
   if (!uid) return;
   await cloudClearExpenses();
   await cloudClearReceivables();
-  await setDoc(userDoc(), { currency: 'PKR', defaultIncome: 0, incomes: {} }, { merge: true });
+  await setDoc(userDoc(), {
+    currency: 'PKR', defaultIncome: 0, incomes: {}, budgets: {}, accounts: []
+  }, { merge: true });
 }
 
 /** First-run helper: lifts existing localStorage data into the cloud. */

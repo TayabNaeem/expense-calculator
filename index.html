@@ -135,7 +135,9 @@
 <nav class="tabs" role="tablist">
   <button class="tab active" role="tab" data-tab="monthly">Monthly Expense</button>
   <button class="tab" role="tab" data-tab="total">Total Expenses Till Now</button>
+  <button class="tab" role="tab" data-tab="accounts">Accounts</button>
   <button class="tab" role="tab" data-tab="receivable">To Receive</button>
+  <button class="tab" role="tab" data-tab="insights">Insights</button>
 </nav>
 
 <main>
@@ -224,8 +226,41 @@
     </div>
 
     <div class="breakdown-card">
+      <h3>Where the money went</h3>
+      <div class="donut-wrap">
+        <div class="donut-chart">
+          <svg id="donut" viewBox="0 0 200 200" role="img" aria-label="Spending by category"></svg>
+          <div class="donut-centre">
+            <span class="donut-total" id="donutTotal">—</span>
+            <span class="donut-caption">this month</span>
+          </div>
+        </div>
+        <div class="donut-legend" id="donutLegend"></div>
+      </div>
+    </div>
+
+    <div class="breakdown-card">
       <h3>Category breakdown</h3>
       <div id="categoryBreakdown" class="bars"></div>
+    </div>
+
+    <div class="list-card">
+      <div class="list-head">
+        <h3>Your budget</h3>
+        <span class="pill" id="budgetSummary">No budgets set</span>
+      </div>
+      <form id="budgetForm" class="budget-form">
+        <div class="field">
+          <label for="budgetCategory">Category</label>
+          <select id="budgetCategory"></select>
+        </div>
+        <div class="field">
+          <label for="budgetAmount">Monthly limit</label>
+          <input type="number" id="budgetAmount" min="0" step="any" placeholder="0" inputmode="decimal" required />
+        </div>
+        <button type="submit" class="primary-btn">Set budget</button>
+      </form>
+      <div id="budgetList" class="budget-list"></div>
     </div>
   </section>
 
@@ -280,6 +315,86 @@
 
     <div class="danger-zone">
       <button id="resetBtn" class="danger-btn">Reset all data</button>
+    </div>
+  </section>
+
+  <!-- ============ ACCOUNTS TAB ============ -->
+  <section id="panel-accounts" class="panel" role="tabpanel">
+    <div class="net-card">
+      <span class="net-label">What you have</span>
+      <span class="net-value" id="netWorth">—</span>
+      <span class="net-sub" id="netSub">across all accounts</span>
+    </div>
+
+    <div class="account-grid" id="accountGrid"></div>
+
+    <div class="income-card">
+      <h3>Add an account</h3>
+      <form id="accountForm" class="account-form">
+        <div class="field">
+          <label for="accName">Account name</label>
+          <input type="text" id="accName" maxlength="40" placeholder="e.g. Allied Bank" required />
+        </div>
+        <div class="field">
+          <label for="accBalance">Opening balance</label>
+          <input type="number" id="accBalance" step="any" placeholder="0" inputmode="decimal" required />
+        </div>
+        <button type="submit" class="primary-btn">Add account</button>
+      </form>
+      <p class="hint accounts-hint">
+        An account's balance is its opening balance minus any expense you charge to it.
+        Reimbursed expenses are added back.
+      </p>
+    </div>
+  </section>
+
+  <!-- ============ INSIGHTS TAB ============ -->
+  <section id="panel-insights" class="panel" role="tabpanel">
+    <div class="stats">
+      <div class="stat">
+        <span class="stat-label">This month</span>
+        <span class="stat-value danger" id="iThisMonth">—</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Last month</span>
+        <span class="stat-value" id="iLastMonth">—</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Change</span>
+        <span class="stat-value" id="iChange">—</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Average per day</span>
+        <span class="stat-value" id="iDaily">—</span>
+      </div>
+    </div>
+
+    <div class="breakdown-card">
+      <h3>Monthly average</h3>
+      <div class="stats inner">
+        <div class="stat">
+          <span class="stat-label">Average month</span>
+          <span class="stat-value" id="iAvgMonth">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Highest month</span>
+          <span class="stat-value" id="iPeak">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-label">Busiest category</span>
+          <span class="stat-value" id="iTopCat">—</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="breakdown-card">
+      <h3>How this month compares, by category</h3>
+      <div id="insightCompare" class="compare-rows"></div>
+    </div>
+
+    <div class="breakdown-card">
+      <h3>Last six months</h3>
+      <div id="trendChart" class="trend"></div>
     </div>
   </section>
 
@@ -378,6 +493,10 @@
           <option>Manna</option>
           <option>Other</option>
         </select>
+      </div>
+      <div class="field">
+        <label for="expAccount">Paid from</label>
+        <select id="expAccount"></select>
       </div>
       <div class="field wide">
         <label for="expNote">Note (optional)</label>
@@ -500,6 +619,43 @@
 
     <div class="profile-section">
       <button type="button" id="deleteRecBtn" class="danger-btn wide">Delete this entry</button>
+    </div>
+  </div>
+</div>
+
+<!-- ============ ACCOUNT MODAL ============ -->
+<div class="modal-backdrop" id="accountModal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="accModalTitle">
+    <div class="modal-head">
+      <h3 id="accModalTitle">Account</h3>
+      <button id="closeAccountModal" class="icon-btn" aria-label="Close">✕</button>
+    </div>
+
+    <div class="rec-summary">
+      <div><span class="stat-label">Opening</span><strong id="accOpening">—</strong></div>
+      <div><span class="stat-label">Spent from it</span><strong class="danger-text" id="accSpent">—</strong></div>
+      <div><span class="stat-label">Balance now</span><strong id="accCurrent">—</strong></div>
+    </div>
+
+    <form id="accountEditForm" class="payment-form">
+      <div class="field">
+        <label for="accEditName">Name</label>
+        <input type="text" id="accEditName" maxlength="40" required />
+      </div>
+      <div class="field">
+        <label for="accEditBalance">Opening balance</label>
+        <input type="number" id="accEditBalance" step="any" required />
+      </div>
+      <button type="submit" class="primary-btn wide">Save changes</button>
+    </form>
+
+    <div class="day-entries">
+      <h4>Recent expenses from this account</h4>
+      <div id="accEntries" class="entries"></div>
+    </div>
+
+    <div class="profile-section">
+      <button type="button" id="deleteAccountBtn" class="danger-btn wide">Delete account</button>
     </div>
   </div>
 </div>

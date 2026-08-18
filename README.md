@@ -17,6 +17,9 @@ A clean, no-signup expense tracker. Set your monthly income, tap a date on the c
   counting toward the month's spending and that much budget is freed, while
   the entries stay on record in a "Settled this month" section and can be
   put back at any time
+- Donut chart of the month with a colour-coded legend
+- Per-category monthly budgets with progress bars that warn near the limit
+  and turn red past it
 - Category breakdown for the month
 - Move to any month with the ‹ › arrows
 
@@ -26,7 +29,17 @@ A clean, no-signup expense tracker. Set your monthly income, tap a date on the c
 - All-time category breakdown
 - Month-by-month summary table
 
-**Accounts**
+**Accounts tab**
+- Track what you hold across several accounts, with a combined net figure
+- Charge an expense to an account and its balance moves automatically
+- Reimbursed expenses are added back, so a settled expense costs nothing
+
+**Insights tab**
+- This month against last, with the direction of travel
+- Average and highest month, busiest category, average spend per day
+- Category-by-category comparison and a six month trend
+
+**Sign in**
 - Register with email and password, or continue with Google
 - Password reset by email, and change-password from the profile panel
 - Profile photo upload and editable display name
@@ -86,9 +99,9 @@ step 2, which is why getting those right matters.
 
 ```
 users/{uid}                 -> { currency, defaultIncome, incomes,
-                                 displayName, photo }
+                                 budgets, accounts, displayName, photo }
 users/{uid}/expenses/{id}   -> { date, amount, category, note, createdAt,
-                                 settled, settledOn }
+                                 settled, settledOn, accountId }
 users/{uid}/receivables/{id}
                             -> { person, amount, note, date, createdAt,
                                  payments: [{ id, amount, date }] }
@@ -97,6 +110,10 @@ users/{uid}/receivables/{id}
 Payments live inside their receivable rather than in their own collection: a
 debt has a handful of repayments at most, and keeping them together means one
 document read and no join.
+
+Budgets and accounts sit on the user document rather than in collections of
+their own, for the same reason and one more: the existing rule already covers
+that document, so adding them needed no rules change.
 
 ### Why the avatar is not in Firebase Storage
 

@@ -40,15 +40,25 @@ const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
 const defaultState = () => ({
   currency: 'PKR',
   defaultIncome: 0,
-  incomes: {},     // "YYYY-MM" -> number
-  expenses: [],    // { id, date: "YYYY-MM-DD", amount, category, note }
-  receivables: []  // { id, person, amount, note, date, payments: [...] }
+  incomes: {},      // "YYYY-MM" -> number
+  budgets: {},      // category -> monthly limit
+  accounts: [],     // { id, name, openingBalance, createdAt }
+  expenses: [],     // { id, date: "YYYY-MM-DD", amount, category, note, accountId }
+  receivables: []   // { id, person, amount, note, date, payments: [...] }
 });
+
+// the category list lives in the markup, so the two can never drift
+const CATEGORIES = () => [...document.querySelectorAll('#expCategory option')].map((o) => o.value);
+
+// enough distinct hues for every category, in the order they rank
+const SLICE_COLOURS = ['#14808d', '#1a9aa8', '#5b53b8', '#8e6fd4', '#dc3545',
+  '#e8743b', '#c47f0a', '#12996b', '#2d7dd2', '#8a94a6'];
 
 let state = load();
 let viewDate = new Date();           // which month the Monthly tab is showing
 let modalDate = null;                // "YYYY-MM-DD" currently open in the modal
 let openReceivableId = null;         // receivable shown in the detail modal
+let openAccountId = null;            // account shown in the account modal
 let cloudReady = false;              // true once Firestore has delivered data
 
 /* ---------------- storage ---------------- */
@@ -78,8 +88,17 @@ function normalize(data) {
     amount: Number(e.amount) || 0,
     createdAt: Number(e.createdAt) || Number(e.id) || 0,
     settled: e.settled === true,
-    settledOn: e.settledOn || ''
+    settledOn: e.settledOn || '',
+    accountId: e.accountId || ''
   }));
+  data.accounts = (data.accounts || []).map((a) => ({
+    ...a,
+    id: String(a.id),
+    name: a.name || 'Account',
+    openingBalance: Number(a.openingBalance) || 0,
+    createdAt: Number(a.createdAt) || 0
+  }));
+  data.budgets = data.budgets || {};
   data.receivables = (data.receivables || []).map((r) => ({
     ...r,
     id: String(r.id),
@@ -197,7 +216,10 @@ function renderMonthly() {
   renderCalendar(active);
   renderMonthList(active);
   renderSettled(settled, key);
-  renderBars($('categoryBreakdown'), groupBy(active, 'category'), 'No expenses this month yet.');
+  const byCategory = groupBy(active, 'category');
+  renderDonut(byCategory);
+  renderBars($('categoryBreakdown'), byCategory, 'No expenses this month yet.');
+  renderBudgets(active);
 }
 
 function renderCalendar(active) {
@@ -438,13 +460,14 @@ function renderBars(container, data, emptyMsg, sortDesc = true) {
 
 /* ---------------- expense actions ---------------- */
 
-function addExpense(date, amount, category, note) {
+function addExpense(date, amount, category, note, accountId = '') {
   const expense = {
     id: newId(),
     date,
     amount: Number(amount),
     category,
     note: note.trim(),
+    accountId,
     createdAt: Date.now()
   };
 
@@ -469,7 +492,9 @@ function saveSettings() {
   push(() => cloudSaveSettings({
     currency: state.currency,
     defaultIncome: state.defaultIncome,
-    incomes: state.incomes
+    incomes: state.incomes,
+    budgets: state.budgets,
+    accounts: state.accounts
   }));
 }
 
@@ -593,6 +618,325 @@ function unsettleCategory(category, items) {
   save();
   renderAll();
   push(() => cloudSaveExpenses(changed));
+}
+
+/* ---------------- donut ---------------- */
+
+function renderDonut(totals) {
+  const svg = $('donut');
+  const legend = $('donutLegend');
+  const pairs = Object.entries(totals).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  const total = pairs.reduce((t, [, v]) => t + v, 0);
+
+  $('donutTotal').textContent = total > 0 ? compact(total) : fmt(0);
+  svg.innerHTML = '';
+  legend.innerHTML = '';
+
+  if (!total) {
+    svg.innerHTML = '<circle cx="100" cy="100" r="70" fill="none" stroke="#e6ebf1" stroke-width="30" />';
+    legend.innerHTML = '<p class="empty">No expenses this month yet.</p>';
+    return;
+  }
+
+  // one stroked circle per slice, rotated into place by its offset — no path
+  // maths and no charting library
+  const radius = 70;
+  const circumference = 2 * Math.PI * radius;
+  let offset = 0;
+
+  pairs.forEach(([label, value], i) => {
+    const share = value / total;
+    const colour = SLICE_COLOURS[i % SLICE_COLOURS.length];
+
+    const arc = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    arc.setAttribute('cx', '100');
+    arc.setAttribute('cy', '100');
+    arc.setAttribute('r', String(radius));
+    arc.setAttribute('fill', 'none');
+    arc.setAttribute('stroke', colour);
+    arc.setAttribute('stroke-width', '30');
+    // a hair of spacing between slices, but never wider than the slice itself
+    const gap = Math.min(2, share * circumference * 0.4);
+    arc.setAttribute('stroke-dasharray', (share * circumference - gap) + ' ' + circumference);
+    arc.setAttribute('stroke-dashoffset', String(-offset));
+    arc.setAttribute('transform', 'rotate(-90 100 100)');
+    arc.innerHTML = '<title>' + escapeHtml(label) + ': ' + fmt(value) + ' (' + (share * 100).toFixed(1) + '%)</title>';
+    svg.appendChild(arc);
+    offset += share * circumference;
+
+    const row = document.createElement('div');
+    row.className = 'legend-row';
+    row.innerHTML =
+      '<span class="legend-dot" style="background:' + colour + '"></span>' +
+      '<span class="legend-label">' + escapeHtml(label) + '</span>' +
+      '<span class="legend-amount">' + fmt(value) + '</span>' +
+      '<span class="legend-share">' + (share * 100).toFixed(1) + '%</span>';
+    legend.appendChild(row);
+  });
+}
+
+/* ---------------- budgets ---------------- */
+
+function renderBudgets(active) {
+  const spentByCategory = groupBy(active, 'category');
+  const entries = Object.entries(state.budgets).filter(([, limit]) => Number(limit) > 0);
+
+  const totalLimit = entries.reduce((t, [, limit]) => t + Number(limit), 0);
+  const totalSpent = entries.reduce((t, [cat]) => t + (spentByCategory[cat] || 0), 0);
+  $('budgetSummary').textContent = entries.length
+    ? fmt(totalSpent) + ' of ' + fmt(totalLimit)
+    : 'No budgets set';
+
+  const box = $('budgetList');
+  box.innerHTML = '';
+  if (!entries.length) {
+    box.innerHTML = '<p class="empty">No budgets yet. Pick a category above to cap what you spend on it each month.</p>';
+    return;
+  }
+
+  for (const [category, limit] of entries.sort((a, b) => Number(b[1]) - Number(a[1]))) {
+    const cap = Number(limit);
+    const spent = spentByCategory[category] || 0;
+    const pct = cap > 0 ? (spent / cap) * 100 : 0;
+    const left = cap - spent;
+    const level = pct >= 100 ? 'over' : pct >= 80 ? 'close' : 'fine';
+
+    const row = document.createElement('div');
+    row.className = 'budget-row ' + level;
+    row.innerHTML =
+      '<div class="budget-top">' +
+        '<span class="budget-name">' + escapeHtml(category) + '</span>' +
+        '<span class="budget-figures"><strong>' + fmt(spent) + '</strong>' +
+        '<span class="budget-of">of ' + fmt(cap) + '</span></span>' +
+        '<button type="button" class="del-btn" title="Remove this budget">\u2715</button>' +
+      '</div>' +
+      '<span class="bar-track"><span class="bar-fill" style="width:' + Math.min(pct, 100) + '%"></span></span>' +
+      '<span class="budget-meta">' +
+        (left >= 0
+          ? fmt(left) + ' left · ' + pct.toFixed(0) + '% used'
+          : fmt(Math.abs(left)) + ' over budget') +
+      '</span>';
+
+    row.querySelector('.del-btn').addEventListener('click', () => {
+      delete state.budgets[category];
+      saveSettings();
+      renderAll();
+    });
+    box.appendChild(row);
+  }
+}
+
+function refreshCategoryPicker() {
+  const select = $('budgetCategory');
+  const chosen = select.value;
+  select.innerHTML = '';
+  for (const category of CATEGORIES()) {
+    const option = document.createElement('option');
+    option.value = category;
+    option.textContent = category;
+    select.appendChild(option);
+  }
+  if (chosen) select.value = chosen;
+}
+
+/* ---------------- accounts ---------------- */
+
+/** Reimbursed expenses came back, so they do not reduce a balance. */
+function spentFromAccount(id) {
+  return sum(state.expenses.filter((e) => e.accountId === id && !e.settled));
+}
+
+function balanceOf(account) {
+  return account.openingBalance - spentFromAccount(account.id);
+}
+
+function renderAccounts() {
+  const net = state.accounts.reduce((t, a) => t + balanceOf(a), 0);
+  $('netWorth').textContent = fmt(net);
+  $('netWorth').classList.toggle('over', net < 0);
+  $('netSub').textContent = state.accounts.length
+    ? 'across ' + state.accounts.length + (state.accounts.length === 1 ? ' account' : ' accounts')
+    : 'no accounts yet';
+
+  const grid = $('accountGrid');
+  grid.innerHTML = '';
+  if (!state.accounts.length) {
+    grid.innerHTML = '<p class="empty">No accounts yet. Add one below to track what sits where.</p>';
+    return;
+  }
+
+  for (const account of [...state.accounts].sort((a, b) => balanceOf(b) - balanceOf(a))) {
+    const balance = balanceOf(account);
+    const spent = spentFromAccount(account.id);
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'account-card' + (balance < 0 ? ' negative' : '');
+    card.innerHTML =
+      '<span class="account-name">' + escapeHtml(account.name) + '</span>' +
+      '<span class="account-balance">' + fmt(balance) + '</span>' +
+      '<span class="account-meta">' + (spent > 0 ? fmt(spent) + ' spent' : 'nothing spent yet') + '</span>';
+    card.addEventListener('click', () => openAccount(account.id));
+    grid.appendChild(card);
+  }
+}
+
+function refreshAccountPicker() {
+  const select = $('expAccount');
+  const chosen = select.value;
+  select.innerHTML = '';
+
+  const none = document.createElement('option');
+  none.value = '';
+  none.textContent = state.accounts.length ? 'Not from an account' : 'No accounts set up';
+  select.appendChild(none);
+
+  for (const account of state.accounts) {
+    const option = document.createElement('option');
+    option.value = account.id;
+    option.textContent = account.name;
+    select.appendChild(option);
+  }
+  if (chosen) select.value = chosen;
+}
+
+function currentAccount() {
+  return state.accounts.find((a) => a.id === openAccountId) || null;
+}
+
+function openAccount(id) {
+  openAccountId = id;
+  $('accountModal').hidden = false;
+  renderAccountModal();
+}
+
+function closeAccountModal() {
+  $('accountModal').hidden = true;
+  openAccountId = null;
+}
+
+function renderAccountModal() {
+  const account = currentAccount();
+  if (!account) return closeAccountModal();
+
+  const spent = spentFromAccount(account.id);
+  $('accModalTitle').textContent = account.name;
+  $('accOpening').textContent = fmt(account.openingBalance);
+  $('accSpent').textContent = fmt(spent);
+  $('accCurrent').textContent = fmt(balanceOf(account));
+  if (document.activeElement !== $('accEditName')) $('accEditName').value = account.name;
+  if (document.activeElement !== $('accEditBalance')) $('accEditBalance').value = account.openingBalance;
+
+  const charged = state.expenses
+    .filter((e) => e.accountId === account.id)
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, 12);
+
+  const box = $('accEntries');
+  box.innerHTML = '';
+  if (!charged.length) {
+    box.innerHTML = '<p class="empty">Nothing has been charged to this account yet.</p>';
+    return;
+  }
+  for (const e of charged) box.appendChild(entryRow(e));
+}
+
+/* ---------------- insights ---------------- */
+
+function renderInsights() {
+  const now = new Date();
+  const thisKey = monthKey(now);
+  const lastKey = monthKey(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+
+  const thisList = activeFor(thisKey);
+  const lastList = activeFor(lastKey);
+  const thisTotal = sum(thisList);
+  const lastTotal = sum(lastList);
+
+  $('iThisMonth').textContent = fmt(thisTotal);
+  $('iLastMonth').textContent = fmt(lastTotal);
+
+  const change = $('iChange');
+  if (!lastTotal) {
+    change.textContent = thisTotal ? 'first month' : '—';
+    change.className = 'stat-value';
+  } else {
+    const delta = ((thisTotal - lastTotal) / lastTotal) * 100;
+    change.textContent = (delta >= 0 ? '+' : '') + delta.toFixed(1) + '%';
+    // spending less than last month is the good direction
+    change.className = 'stat-value ' + (delta > 0 ? 'danger' : 'good');
+  }
+
+  $('iDaily').textContent = fmt(thisTotal / now.getDate());
+
+  const keys = [...new Set(state.expenses.filter((e) => !e.settled).map((e) => monthOf(e.date)))].sort();
+  const monthTotals = keys.map((k) => ({ key: k, total: sum(activeFor(k)) }));
+
+  $('iAvgMonth').textContent = monthTotals.length
+    ? fmt(monthTotals.reduce((t, m) => t + m.total, 0) / monthTotals.length)
+    : fmt(0);
+
+  const peak = monthTotals.reduce((best, m) => (!best || m.total > best.total ? m : best), null);
+  $('iPeak').textContent = peak ? fmt(peak.total) : '—';
+  $('iPeak').title = peak ? monthTitle(peak.key) : '';
+
+  const allCategories = groupBy(state.expenses.filter((e) => !e.settled), 'category');
+  const top = Object.entries(allCategories).sort((a, b) => b[1] - a[1])[0];
+  $('iTopCat').textContent = top ? top[0] : '—';
+  $('iTopCat').title = top ? fmt(top[1]) + ' all time' : '';
+
+  renderCompare(groupBy(thisList, 'category'), groupBy(lastList, 'category'));
+  renderTrend(monthTotals.slice(-6));
+}
+
+function renderCompare(thisMonth, lastMonth) {
+  const box = $('insightCompare');
+  const names = [...new Set([...Object.keys(thisMonth), ...Object.keys(lastMonth)])];
+  box.innerHTML = '';
+
+  if (!names.length) {
+    box.innerHTML = '<p class="empty">Nothing to compare yet.</p>';
+    return;
+  }
+
+  for (const name of names.sort((a, b) => (thisMonth[b] || 0) - (thisMonth[a] || 0))) {
+    const nowValue = thisMonth[name] || 0;
+    const before = lastMonth[name] || 0;
+    const diff = nowValue - before;
+    const direction = diff > 0 ? 'up' : diff < 0 ? 'down' : 'flat';
+
+    const row = document.createElement('div');
+    row.className = 'compare-row';
+    row.innerHTML =
+      '<span class="compare-name">' + escapeHtml(name) + '</span>' +
+      '<span class="compare-now">' + fmt(nowValue) + '</span>' +
+      '<span class="compare-then">was ' + fmt(before) + '</span>' +
+      '<span class="compare-diff ' + direction + '">' +
+        (direction === 'flat'
+          ? 'no change'
+          : (diff > 0 ? '\u25B2 ' : '\u25BC ') + fmt(Math.abs(diff))) +
+      '</span>';
+    box.appendChild(row);
+  }
+}
+
+function renderTrend(months) {
+  const box = $('trendChart');
+  box.innerHTML = '';
+  if (!months.length) {
+    box.innerHTML = '<p class="empty">Not enough history yet.</p>';
+    return;
+  }
+
+  const peak = Math.max(...months.map((m) => m.total), 1);
+  for (const month of months) {
+    const column = document.createElement('div');
+    column.className = 'trend-col';
+    column.innerHTML =
+      '<span class="trend-value">' + compact(month.total) + '</span>' +
+      '<span class="trend-bar" style="height:' + Math.max((month.total / peak) * 100, 2) + '%"></span>' +
+      '<span class="trend-label">' + monthTitle(month.key).slice(0, 3) + '</span>';
+    box.appendChild(column);
+  }
 }
 
 /* ---------------- to-receive tab ---------------- */
@@ -776,9 +1120,14 @@ function deleteReceivable(id) {
 
 function renderAll() {
   document.querySelectorAll('[data-cur]').forEach((el) => { el.textContent = symbol(); });
+  refreshAccountPicker();
+  refreshCategoryPicker();
   renderMonthly();
   renderTotal();
   renderReceivables();
+  renderAccounts();
+  renderInsights();
+  if (openAccountId) renderAccountModal();
 }
 
 /* ---------------- events ---------------- */
@@ -853,6 +1202,70 @@ $('deleteRecBtn').addEventListener('click', () => {
   deleteReceivable(id);
 });
 
+$('budgetForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const limit = Number($('budgetAmount').value);
+  if (!(limit > 0)) return alert('Please enter a limit greater than 0.');
+  state.budgets[$('budgetCategory').value] = limit;
+  $('budgetAmount').value = '';
+  saveSettings();
+  renderAll();
+});
+
+$('accountForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const name = $('accName').value.trim();
+  const balance = Number($('accBalance').value);
+  if (!name) return alert('Please give the account a name.');
+  if (Number.isNaN(balance)) return alert('Please enter an opening balance.');
+
+  state.accounts.push({ id: newId(), name, openingBalance: balance, createdAt: Date.now() });
+  e.target.reset();
+  saveSettings();
+  renderAll();
+  $('accName').focus();
+});
+
+$('accountEditForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const account = currentAccount();
+  if (!account) return;
+  const name = $('accEditName').value.trim();
+  const balance = Number($('accEditBalance').value);
+  if (!name) return alert('Please give the account a name.');
+  if (Number.isNaN(balance)) return alert('Please enter an opening balance.');
+
+  account.name = name;
+  account.openingBalance = balance;
+  saveSettings();
+  renderAll();
+});
+
+$('deleteAccountBtn').addEventListener('click', () => {
+  const account = currentAccount();
+  if (!account) return;
+  const charged = state.expenses.filter((x) => x.accountId === account.id).length;
+  const warning = charged
+    ? '\n\n' + charged + ' expense' + (charged === 1 ? '' : 's') +
+      ' charged to it will be kept, but will no longer be tied to an account.'
+    : '';
+  if (!confirm('Delete ' + account.name + '?' + warning)) return;
+
+  // the expenses stay; only the link goes
+  const orphaned = state.expenses.filter((x) => x.accountId === account.id);
+  orphaned.forEach((x) => { x.accountId = ''; });
+  state.accounts = state.accounts.filter((a) => a.id !== account.id);
+  closeAccountModal();
+  saveSettings();
+  renderAll();
+  if (orphaned.length) push(() => cloudSaveExpenses(orphaned));
+});
+
+$('closeAccountModal').addEventListener('click', closeAccountModal);
+$('accountModal').addEventListener('click', (e) => {
+  if (e.target === $('accountModal')) closeAccountModal();
+});
+
 $('closeRecModal').addEventListener('click', closeReceivableModal);
 $('recModal').addEventListener('click', (e) => {
   if (e.target === $('recModal')) closeReceivableModal();
@@ -891,7 +1304,7 @@ $('expenseForm').addEventListener('submit', (e) => {
   if (!date) return alert('Please pick a date.');
   if (!(amount > 0)) return alert('Please enter an amount greater than 0.');
 
-  addExpense(date, amount, $('expCategory').value, $('expNote').value);
+  addExpense(date, amount, $('expCategory').value, $('expNote').value, $('expAccount').value);
 
   // stay on the day that was just used, so several entries can be added quickly
   modalDate = date;
@@ -908,6 +1321,7 @@ document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if (!$('modal').hidden) closeModal();
   else if (!$('recModal').hidden) closeReceivableModal();
+  else if (!$('accountModal').hidden) closeAccountModal();
   else if (!$('profileModal').hidden) $('profileModal').hidden = true;
 });
 
@@ -952,7 +1366,7 @@ $('importFile').addEventListener('change', (e) => {
 });
 
 $('resetBtn').addEventListener('click', () => {
-  if (!confirm('This deletes every income and expense you have saved, on this device and in the cloud. Continue?')) return;
+  if (!confirm('This deletes everything — expenses, income, budgets, accounts and anyone who owes you — on this device and in the cloud. Continue?')) return;
   state = defaultState();
   save();
   $('currencySelect').value = state.currency;
@@ -1006,6 +1420,8 @@ initCloud({
       currency: settings.currency || state.currency,
       defaultIncome: failed.settings ? state.defaultIncome : (Number(settings.defaultIncome) || 0),
       incomes: failed.settings ? state.incomes : (settings.incomes || {}),
+      budgets: failed.settings ? state.budgets : (settings.budgets || {}),
+      accounts: failed.settings ? state.accounts : (settings.accounts || []),
       expenses,
       receivables
     });
