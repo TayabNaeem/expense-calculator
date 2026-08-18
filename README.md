@@ -29,6 +29,14 @@ A clean, no-signup expense tracker. Set your monthly income, tap a date on the c
 - Sign out clears the local cache, so a shared device never shows the
   previous person's figures
 
+**To Receive tab**
+- Log money someone owes you: person, amount, date given, and a note saying what it was for
+- Open an entry to record part payments as they come in
+- Each payment is kept with its date, so you get a running history
+- Remaining balance and a progress bar update as you go; entries mark themselves settled
+- "Mark fully received" closes out whatever is left in one tap
+- Filter by not-settled, settled, or all
+
 **Extras**
 - Every entry is saved to Firebase (Cloud Firestore) in real time
 - Works offline — changes queue locally and upload when you reconnect
@@ -74,7 +82,14 @@ step 2, which is why getting those right matters.
 users/{uid}                 -> { currency, defaultIncome, incomes,
                                  displayName, photo }
 users/{uid}/expenses/{id}   -> { date, amount, category, note, createdAt }
+users/{uid}/receivables/{id}
+                            -> { person, amount, note, date, createdAt,
+                                 payments: [{ id, amount, date }] }
 ```
+
+Payments live inside their receivable rather than in their own collection: a
+debt has a handful of repayments at most, and keeping them together means one
+document read and no join.
 
 ### Why the avatar is not in Firebase Storage
 

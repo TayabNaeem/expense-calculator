@@ -22,6 +22,21 @@ service cloud.firestore {
         && (!('displayName' in request.resource.data)
             || request.resource.data.displayName.size() <= 60);
 
+      match /receivables/{receivableId} {
+        allow read, delete: if request.auth != null && request.auth.uid == userId;
+
+        allow create, update: if request.auth != null
+          && request.auth.uid == userId
+          && request.resource.data.amount is number
+          && request.resource.data.amount >= 0
+          && request.resource.data.person is string
+          && request.resource.data.person.size() <= 60
+          && request.resource.data.payments is list
+          && request.resource.data.payments.size() <= 200
+          && (!('note' in request.resource.data)
+              || request.resource.data.note.size() <= 200);
+      }
+
       match /expenses/{expenseId} {
         allow read, delete: if request.auth != null && request.auth.uid == userId;
 

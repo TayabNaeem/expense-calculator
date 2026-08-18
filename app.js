@@ -9,6 +9,7 @@
 import {
   initCloud, cloudSaveSettings, cloudAddExpense, cloudDeleteExpense,
   cloudReplaceAll, cloudClearAll, cloudMigrate,
+  cloudSaveReceivable, cloudDeleteReceivable,
   loginWithEmail, registerWithEmail, signInWithGoogle, continueAsGuest,
   resetPassword, signOutUser, changePassword, saveProfile,
   hasPasswordProvider, currentUser, authErrorMessage
@@ -39,13 +40,15 @@ const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
 const defaultState = () => ({
   currency: 'PKR',
   defaultIncome: 0,
-  incomes: {},   // "YYYY-MM" -> number
-  expenses: []   // { id, date: "YYYY-MM-DD", amount, category, note }
+  incomes: {},     // "YYYY-MM" -> number
+  expenses: [],    // { id, date: "YYYY-MM-DD", amount, category, note }
+  receivables: []  // { id, person, amount, note, date, payments: [...] }
 });
 
 let state = load();
 let viewDate = new Date();           // which month the Monthly tab is showing
 let modalDate = null;                // "YYYY-MM-DD" currently open in the modal
+let openReceivableId = null;         // receivable shown in the detail modal
 let cloudReady = false;              // true once Firestore has delivered data
 
 /* ---------------- storage ---------------- */
@@ -75,8 +78,27 @@ function normalize(data) {
     amount: Number(e.amount) || 0,
     createdAt: Number(e.createdAt) || Number(e.id) || 0
   }));
+  data.receivables = (data.receivables || []).map((r) => ({
+    ...r,
+    id: String(r.id),
+    person: r.person || 'Unnamed',
+    amount: Number(r.amount) || 0,
+    note: r.note || '',
+    createdAt: Number(r.createdAt) || 0,
+    payments: (r.payments || []).map((pay) => ({
+      id: String(pay.id),
+      amount: Number(pay.amount) || 0,
+      date: pay.date
+    }))
+  }));
   return data;
 }
+
+/* ---------------- receivable maths ---------------- */
+
+const receivedOf = (r) => (r.payments || []).reduce((t, p) => t + (Number(p.amount) || 0), 0);
+const remainingOf = (r) => Math.max(0, (Number(r.amount) || 0) - receivedOf(r));
+const isSettled = (r) => remainingOf(r) <= 0.005;
 
 function newId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
@@ -411,12 +433,190 @@ function renderModalList() {
   for (const e of list) box.appendChild(entryRow(e, false));
 }
 
+/* ---------------- to-receive tab ---------------- */
+
+function renderReceivables() {
+  const list = state.receivables;
+  const totalLent = list.reduce((t, r) => t + (Number(r.amount) || 0), 0);
+  const totalPaid = list.reduce((t, r) => t + receivedOf(r), 0);
+  const outstanding = list.reduce((t, r) => t + remainingOf(r), 0);
+  const owing = new Set(list.filter((r) => !isSettled(r)).map((r) => r.person.toLowerCase()));
+
+  $('rOutstanding').textContent = fmt(outstanding);
+  $('rReceived').textContent = fmt(totalPaid);
+  $('rTotal').textContent = fmt(totalLent);
+  $('rPeople').textContent = owing.size;
+
+  const filter = $('recFilter').value;
+  const shown = list.filter((r) =>
+    filter === 'all' ? true : filter === 'settled' ? isSettled(r) : !isSettled(r));
+
+  // unsettled first, then biggest outstanding, then newest
+  shown.sort((a, b) =>
+    Number(isSettled(a)) - Number(isSettled(b)) ||
+    remainingOf(b) - remainingOf(a) ||
+    b.createdAt - a.createdAt);
+
+  $('recCount').textContent = `${shown.length} ${shown.length === 1 ? 'entry' : 'entries'}`;
+
+  const box = $('receivableList');
+  box.innerHTML = '';
+  if (!shown.length) {
+    box.innerHTML = `<p class="empty">${
+      filter === 'settled' ? 'Nothing settled yet.'
+      : filter === 'all' ? 'No one owes you anything yet. Add an entry above.'
+      : 'Nothing outstanding — everyone has paid you back.'}</p>`;
+    return;
+  }
+  for (const r of shown) box.appendChild(receivableRow(r));
+}
+
+function receivableRow(r) {
+  const received = receivedOf(r);
+  const remaining = remainingOf(r);
+  const settled = isSettled(r);
+  const pct = r.amount > 0 ? (received / r.amount) * 100 : 0;
+
+  const row = document.createElement('button');
+  row.type = 'button';
+  row.className = 'rec-row' + (settled ? ' settled' : '');
+  row.innerHTML = `
+    <span class="rec-avatar">${escapeHtml(r.person.trim().charAt(0).toUpperCase() || '?')}</span>
+    <span class="rec-main">
+      <span class="rec-top">
+        <span class="rec-person">${escapeHtml(r.person)}</span>
+        ${settled ? '<span class="rec-badge">Settled</span>' : ''}
+      </span>
+      ${r.note ? `<span class="rec-note-line">${escapeHtml(r.note)}</span>` : ''}
+      <span class="bar-track"><span class="bar-fill good" style="width:${Math.min(pct, 100)}%"></span></span>
+      <span class="rec-meta">${fmt(received)} received of ${fmt(r.amount)}${r.date ? ` · given ${prettyDate(r.date)}` : ''}</span>
+    </span>
+    <span class="rec-amount">
+      <strong class="${settled ? 'good-text' : 'danger-text'}">${settled ? fmt(0) : fmt(remaining)}</strong>
+      <small>${settled ? 'cleared' : 'remaining'}</small>
+    </span>`;
+  row.addEventListener('click', () => openReceivable(r.id));
+  return row;
+}
+
+/* ---------------- receivable detail ---------------- */
+
+function openReceivable(id) {
+  openReceivableId = id;
+  $('payAmount').value = '';
+  $('payDate').value = dateKey(new Date());
+  $('recModal').hidden = false;
+  renderReceivableModal();
+}
+
+function closeReceivableModal() {
+  $('recModal').hidden = true;
+  openReceivableId = null;
+}
+
+function currentReceivable() {
+  return state.receivables.find((r) => r.id === openReceivableId) || null;
+}
+
+function renderReceivableModal() {
+  const r = currentReceivable();
+  if (!r) return closeReceivableModal();
+
+  const received = receivedOf(r);
+  const remaining = remainingOf(r);
+  const pct = r.amount > 0 ? Math.min((received / r.amount) * 100, 100) : 0;
+
+  $('recModalTitle').textContent = r.person;
+  $('recModalNote').textContent = r.note || '';
+  $('recModalNote').hidden = !r.note;
+  $('recOriginal').textContent = fmt(r.amount);
+  $('recPaid').textContent = fmt(received);
+  $('recRemaining').textContent = fmt(remaining);
+  $('recProgress').style.width = pct + '%';
+  $('recProgressText').textContent = isSettled(r)
+    ? 'Fully received — nothing left to collect.'
+    : `${pct.toFixed(1)}% received · ${fmt(remaining)} still owed`;
+
+  $('paymentForm').hidden = isSettled(r);
+
+  const box = $('paymentList');
+  const payments = [...(r.payments || [])].sort((a, b) =>
+    (b.date || '').localeCompare(a.date || '') || Number(b.id) - Number(a.id));
+
+  box.innerHTML = '';
+  if (!payments.length) {
+    box.innerHTML = '<p class="empty">Nothing received yet.</p>';
+    return;
+  }
+  for (const pay of payments) {
+    const item = document.createElement('div');
+    item.className = 'entry';
+    item.innerHTML = `
+      <div class="entry-main">
+        <div class="entry-top">
+          <span class="entry-cat">Received</span>
+          <span class="entry-date">${pay.date ? prettyDate(pay.date) : ''}</span>
+        </div>
+      </div>
+      <span class="entry-amt good-text">${fmt(pay.amount)}</span>
+      <button class="del-btn" title="Remove this payment">✕</button>`;
+    item.querySelector('.del-btn').addEventListener('click', () => deletePayment(pay.id));
+    box.appendChild(item);
+  }
+}
+
+/* ---------------- receivable actions ---------------- */
+
+function saveReceivable(receivable) {
+  save();
+  renderAll();
+  push(() => cloudSaveReceivable(receivable));
+}
+
+function addReceivable(person, amount, date, note) {
+  const receivable = {
+    id: newId(),
+    person: person.trim(),
+    amount: Number(amount),
+    note: note.trim(),
+    date,
+    createdAt: Date.now(),
+    payments: []
+  };
+  state.receivables.push(receivable);
+  saveReceivable(receivable);
+}
+
+function addPayment(amount, date) {
+  const r = currentReceivable();
+  if (!r) return;
+  r.payments = [...(r.payments || []), { id: newId(), amount: Number(amount), date }];
+  saveReceivable(r);
+  renderReceivableModal();
+}
+
+function deletePayment(paymentId) {
+  const r = currentReceivable();
+  if (!r) return;
+  r.payments = (r.payments || []).filter((p) => p.id !== paymentId);
+  saveReceivable(r);
+  renderReceivableModal();
+}
+
+function deleteReceivable(id) {
+  state.receivables = state.receivables.filter((r) => r.id !== id);
+  save();
+  renderAll();
+  push(() => cloudDeleteReceivable(id));
+}
+
 /* ---------------- render root ---------------- */
 
 function renderAll() {
   document.querySelectorAll('[data-cur]').forEach((el) => { el.textContent = symbol(); });
   renderMonthly();
   renderTotal();
+  renderReceivables();
 }
 
 /* ---------------- events ---------------- */
@@ -441,6 +641,59 @@ $('nextMonth').addEventListener('click', () => {
 });
 
 $('sortSelect').addEventListener('change', () => renderMonthly());
+
+$('recFilter').addEventListener('change', () => renderReceivables());
+
+$('receivableForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const amount = Number($('recAmount').value);
+  if (!$('recPerson').value.trim()) return alert('Whose money is this?');
+  if (!(amount > 0)) return alert('Please enter an amount greater than 0.');
+  if (!$('recDate').value) return alert('Please pick the date you gave it.');
+
+  addReceivable($('recPerson').value, amount, $('recDate').value, $('recNote').value);
+  e.target.reset();
+  $('recDate').value = dateKey(new Date());
+  $('recPerson').focus();
+});
+
+$('paymentForm').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const r = currentReceivable();
+  if (!r) return;
+  const amount = Number($('payAmount').value);
+  if (!(amount > 0)) return alert('Please enter an amount greater than 0.');
+
+  const remaining = remainingOf(r);
+  if (amount - remaining > 0.005 &&
+      !confirm(`That is more than the ${fmt(remaining)} still owed. Record it anyway?`)) return;
+
+  addPayment(amount, $('payDate').value || dateKey(new Date()));
+  $('payAmount').value = '';
+});
+
+$('settleBtn').addEventListener('click', () => {
+  const r = currentReceivable();
+  if (!r) return;
+  const remaining = remainingOf(r);
+  if (remaining <= 0) return;
+  if (!confirm(`Record the remaining ${fmt(remaining)} as received?`)) return;
+  addPayment(remaining, $('payDate').value || dateKey(new Date()));
+});
+
+$('deleteRecBtn').addEventListener('click', () => {
+  const r = currentReceivable();
+  if (!r) return;
+  if (!confirm(`Delete the entry for ${r.person}? The payment history goes with it.`)) return;
+  const id = r.id;
+  closeReceivableModal();
+  deleteReceivable(id);
+});
+
+$('closeRecModal').addEventListener('click', closeReceivableModal);
+$('recModal').addEventListener('click', (e) => {
+  if (e.target === $('recModal')) closeReceivableModal();
+});
 
 $('todayBtn').addEventListener('click', () => {
   viewDate = new Date();
@@ -488,7 +741,12 @@ $('expenseForm').addEventListener('submit', (e) => {
 
 $('closeModal').addEventListener('click', closeModal);
 $('modal').addEventListener('click', (e) => { if (e.target === $('modal')) closeModal(); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('modal').hidden) closeModal(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (!$('modal').hidden) closeModal();
+  else if (!$('recModal').hidden) closeReceivableModal();
+  else if (!$('profileModal').hidden) $('profileModal').hidden = true;
+});
 
 $('currencySelect').addEventListener('change', (e) => {
   state.currency = e.target.value;
@@ -555,14 +813,21 @@ function setStatus(kind, label, detail) {
 }
 
 initCloud({
-  onData({ settings, expenses }) {
+  onData({ settings, expenses, receivables, failed = {} }) {
     const firstDelivery = !cloudReady;
     cloudReady = true;
     applyProfile(settings);
 
     // first run with data already in this browser: lift it up rather than
     // letting an empty cloud wipe it
-    if (firstDelivery && !expenses.length && state.expenses.length &&
+    // a stream that errored reports empty; keep what is already on hand
+    // rather than letting it blank out the local copy
+    if (failed.expenses) expenses = state.expenses;
+    if (failed.receivables) receivables = state.receivables;
+
+    if (firstDelivery && !failed.expenses && !failed.receivables &&
+        !expenses.length && !receivables.length &&
+        (state.expenses.length || state.receivables.length) &&
         !localStorage.getItem(MIGRATED_KEY)) {
       localStorage.setItem(MIGRATED_KEY, '1');
       push(() => cloudMigrate(state));
@@ -572,10 +837,12 @@ initCloud({
 
     state = normalize({
       currency: settings.currency || state.currency,
-      defaultIncome: Number(settings.defaultIncome) || 0,
-      incomes: settings.incomes || {},
-      expenses
+      defaultIncome: failed.settings ? state.defaultIncome : (Number(settings.defaultIncome) || 0),
+      incomes: failed.settings ? state.incomes : (settings.incomes || {}),
+      expenses,
+      receivables
     });
+    if (openReceivableId) renderReceivableModal();
     save();
     $('currencySelect').value = state.currency;
     renderAll();
@@ -869,5 +1136,6 @@ $('signOutBtn').addEventListener('click', async () => {
 /* ---------------- boot ---------------- */
 
 $('currencySelect').value = state.currency;
+$('recDate').value = dateKey(new Date());
 save();        // persist the normalised shape for anything upgraded by load()
 renderAll();

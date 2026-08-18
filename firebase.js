@@ -9,6 +9,8 @@
      users/{uid}                  -> { currency, defaultIncome, incomes,
                                        displayName, photo }
      users/{uid}/expenses/{id}    -> { date, amount, category, note, createdAt }
+     users/{uid}/receivables/{id} -> { person, amount, note, date, createdAt,
+                                       payments: [{ id, amount, date }] }
    ========================================================= */
 
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/12.12.0/firebase-app.js';
@@ -47,49 +49,82 @@ let uid = null;
 let handlers = { onData: () => {}, onStatus: () => {} };
 let unsubSettings = null;
 let unsubExpenses = null;
+let unsubReceivables = null;
 
-// the two snapshot streams arrive separately; hold both and merge
+// the three snapshot streams arrive separately; hold each and merge
 let latestSettings = null;
 let latestExpenses = null;
+let latestReceivables = null;
 let seenSettings = false;
 let seenExpenses = false;
+let seenReceivables = false;
+// streams that errored, so the UI can keep what it already had for them
+let failed = { settings: false, expenses: false, receivables: false };
 
 const userDoc = () => doc(db, 'users', uid);
 const expensesCol = () => collection(db, 'users', uid, 'expenses');
+const receivablesCol = () => collection(db, 'users', uid, 'receivables');
 
 function emit() {
   // only report upward once both streams have delivered at least once,
   // otherwise the UI would flash a half-empty state
-  if (!seenSettings || !seenExpenses) return;
+  if (!seenSettings || !seenExpenses || !seenReceivables) return;
   handlers.onData({
     settings: latestSettings || {},
-    expenses: latestExpenses || []
+    expenses: latestExpenses || [],
+    receivables: latestReceivables || [],
+    failed: { ...failed }
   });
+}
+
+/**
+ * A stream that cannot be read must not hold the whole app hostage — mark it
+ * delivered as empty so the streams that did load can still render, then
+ * surface the error.
+ */
+function streamFailed(name, markDelivered) {
+  return (err) => {
+    failed[name] = true;
+    markDelivered();
+    emit();
+    reportError(err);
+  };
 }
 
 function subscribe() {
   unsubSettings = onSnapshot(userDoc(), (snap) => {
     latestSettings = snap.exists() ? snap.data() : {};
     seenSettings = true;
+    failed.settings = false;
     emit();
-  }, reportError);
+  }, streamFailed('settings', () => { latestSettings = {}; seenSettings = true; }));
 
   unsubExpenses = onSnapshot(expensesCol(), (snap) => {
     latestExpenses = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     seenExpenses = true;
+    failed.expenses = false;
     emit();
     handlers.onStatus({
       state: snap.metadata.fromCache ? 'offline' : 'synced',
       user: auth.currentUser
     });
-  }, reportError);
+  }, streamFailed('expenses', () => { latestExpenses = []; seenExpenses = true; }));
+
+  unsubReceivables = onSnapshot(receivablesCol(), (snap) => {
+    latestReceivables = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    seenReceivables = true;
+    failed.receivables = false;
+    emit();
+  }, streamFailed('receivables', () => { latestReceivables = []; seenReceivables = true; }));
 }
 
 function unsubscribeAll() {
   if (unsubSettings) { unsubSettings(); unsubSettings = null; }
   if (unsubExpenses) { unsubExpenses(); unsubExpenses = null; }
-  seenSettings = seenExpenses = false;
-  latestSettings = latestExpenses = null;
+  if (unsubReceivables) { unsubReceivables(); unsubReceivables = null; }
+  seenSettings = seenExpenses = seenReceivables = false;
+  latestSettings = latestExpenses = latestReceivables = null;
+  failed = { settings: false, expenses: false, receivables: false };
 }
 
 /** Turns the setup mistakes everyone hits into instructions. */
@@ -266,21 +301,35 @@ export async function cloudDeleteExpense(id) {
   await deleteDoc(doc(expensesCol(), id));
 }
 
+/** Writes the whole receivable, payment history included. */
+export async function cloudSaveReceivable(receivable) {
+  if (!uid) return;
+  await setDoc(doc(receivablesCol(), receivable.id), receivable);
+}
+
+export async function cloudDeleteReceivable(id) {
+  if (!uid) return;
+  await deleteDoc(doc(receivablesCol(), id));
+}
+
 /** Wipes the cloud copy and writes `data` in its place — used by import. */
 export async function cloudReplaceAll(data) {
   if (!uid) return;
   await cloudClearExpenses();
+  await cloudClearReceivables();
   await setDoc(userDoc(), {
     currency: data.currency,
     defaultIncome: data.defaultIncome,
     incomes: data.incomes
   }, { merge: true });
   await writeExpensesInBatches(data.expenses);
+  await writeReceivablesInBatches(data.receivables || []);
 }
 
 export async function cloudClearAll() {
   if (!uid) return;
   await cloudClearExpenses();
+  await cloudClearReceivables();
   await setDoc(userDoc(), { currency: 'PKR', defaultIncome: 0, incomes: {} }, { merge: true });
 }
 
@@ -293,6 +342,7 @@ export async function cloudMigrate(data) {
     incomes: data.incomes
   }, { merge: true });
   await writeExpensesInBatches(data.expenses);
+  await writeReceivablesInBatches(data.receivables || []);
 }
 
 async function cloudClearExpenses() {
@@ -300,8 +350,17 @@ async function cloudClearExpenses() {
   await runBatches(snap.docs, (batch, d) => batch.delete(d.ref));
 }
 
+async function cloudClearReceivables() {
+  const snap = await getDocs(receivablesCol());
+  await runBatches(snap.docs, (batch, d) => batch.delete(d.ref));
+}
+
 async function writeExpensesInBatches(expenses) {
   await runBatches(expenses, (batch, e) => batch.set(doc(expensesCol(), e.id), e));
+}
+
+async function writeReceivablesInBatches(receivables) {
+  await runBatches(receivables, (batch, r) => batch.set(doc(receivablesCol(), r.id), r));
 }
 
 // Firestore caps a batch at 500 operations
