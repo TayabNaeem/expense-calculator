@@ -338,7 +338,7 @@ export async function cloudClearAll() {
   await cloudClearExpenses();
   await cloudClearReceivables();
   await setDoc(userDoc(), {
-    currency: 'PKR', defaultIncome: 0, incomes: {}, budgets: {}, accounts: []
+    currency: 'PKR', defaultIncome: 0, incomes: {}, accounts: []
   }, { merge: true });
 }
 

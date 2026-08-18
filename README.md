@@ -9,7 +9,9 @@ Four pages, following the layout of the reference app.
 **Home**
 - What you have: every account with its balance and a combined net figure
 - Your monthly expense: donut chart with a colour-coded legend
-- Your budget: a monthly cap per category, amber near the limit and red past it
+- What you spent: enter an amount against a category and it is logged as an
+  expense for today, straight off the salary account, with the month's running
+  split underneath
 
 **Money**
 - Salary for the month, or one default that applies to every month
@@ -35,7 +37,12 @@ account, and expenses come out of it by default, so the balance tracks what is
 actually left. Naming a different account on an expense overrides that.
 
 Categories: Home, Family, Food and drink, Petrol, Office expense, Personal,
-Love, Mobile topup.
+Love, Loan, Mobile topup.
+
+Entries filed under a retired name are folded into the current one the next
+time they load, in the browser and in Firestore: lunch and dinner become food
+and drink, given-to-someone becomes loan, house becomes home, and load becomes
+mobile topup.
 
 ## Firebase setup (required)
 

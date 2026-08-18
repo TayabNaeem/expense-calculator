@@ -41,7 +41,6 @@ const defaultState = () => ({
   currency: 'PKR',
   defaultIncome: 0,
   incomes: {},      // "YYYY-MM" -> number
-  budgets: {},      // category -> monthly limit
   accounts: [],     // { id, name, openingBalance, createdAt }
   expenses: [],     // { id, date: "YYYY-MM-DD", amount, category, note, accountId }
   receivables: []   // { id, person, amount, note, date, payments: [...] }
@@ -49,6 +48,24 @@ const defaultState = () => ({
 
 // the category list lives in the markup, so the two can never drift
 const CATEGORIES = () => [...document.querySelectorAll('#expCategory option')].map((o) => o.value);
+
+/**
+ * Categories that were renamed. Entries filed under the old name are rewritten
+ * to the current one so they total together instead of splitting the report.
+ */
+const CATEGORY_ALIASES = {
+  'lunch': 'Food and drink',
+  'dinner': 'Food and drink',
+  'food & drink': 'Food and drink',
+  'given to someone': 'Loan',
+  'house': 'Home',
+  'load': 'Mobile topup'
+};
+
+function canonicalCategory(name) {
+  const key = String(name || '').trim().toLowerCase();
+  return CATEGORY_ALIASES[key] || name || 'Personal';
+}
 
 // enough distinct hues for every category, in the order they rank
 const SLICE_COLOURS = ['#14808d', '#1a9aa8', '#5b53b8', '#8e6fd4', '#dc3545',
@@ -87,6 +104,7 @@ function normalize(data) {
     id: String(e.id),
     amount: Number(e.amount) || 0,
     createdAt: Number(e.createdAt) || Number(e.id) || 0,
+    category: canonicalCategory(e.category),
     settled: e.settled === true,
     settledOn: e.settledOn || '',
     accountId: e.accountId || ''
@@ -99,7 +117,6 @@ function normalize(data) {
     type: a.type || 'other',
     createdAt: Number(a.createdAt) || 0
   }));
-  data.budgets = data.budgets || {};
   data.receivables = (data.receivables || []).map((r) => ({
     ...r,
     id: String(r.id),
@@ -220,7 +237,7 @@ function renderMonthly() {
   const byCategory = groupBy(active, 'category');
   renderDonut(byCategory);
   renderBars($('categoryBreakdown'), byCategory, 'No expenses this month yet.');
-  renderBudgets(active);
+  renderSpending(active);
 }
 
 function renderCalendar(active) {
@@ -496,7 +513,6 @@ function saveSettings() {
     currency: state.currency,
     defaultIncome: state.defaultIncome,
     incomes: state.incomes,
-    budgets: state.budgets,
     accounts: state.accounts
   }));
 }
@@ -678,59 +694,39 @@ function renderDonut(totals) {
   });
 }
 
-/* ---------------- budgets ---------------- */
+/* ---------------- quick spend entry ---------------- */
 
-function renderBudgets(active) {
-  const spentByCategory = groupBy(active, 'category');
-  const entries = Object.entries(state.budgets).filter(([, limit]) => Number(limit) > 0);
+function renderSpending(active) {
+  const byCategory = groupBy(active, 'category');
+  const total = sum(active);
+  $('spendSummary').textContent = total > 0 ? fmt(total) + ' this month' : 'Nothing yet';
 
-  const totalLimit = entries.reduce((t, [, limit]) => t + Number(limit), 0);
-  const totalSpent = entries.reduce((t, [cat]) => t + (spentByCategory[cat] || 0), 0);
-  $('budgetSummary').textContent = entries.length
-    ? fmt(totalSpent) + ' of ' + fmt(totalLimit)
-    : 'No budgets set';
-
-  const box = $('budgetList');
+  const box = $('spendList');
   box.innerHTML = '';
-  if (!entries.length) {
-    box.innerHTML = '<p class="empty">No budgets yet. Pick a category above to cap what you spend on it each month.</p>';
+
+  const pairs = Object.entries(byCategory).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+  if (!pairs.length) {
+    box.innerHTML = '<p class="empty">Nothing logged this month. Pick a category above and enter what you spent.</p>';
     return;
   }
 
-  for (const [category, limit] of entries.sort((a, b) => Number(b[1]) - Number(a[1]))) {
-    const cap = Number(limit);
-    const spent = spentByCategory[category] || 0;
-    const pct = cap > 0 ? (spent / cap) * 100 : 0;
-    const left = cap - spent;
-    const level = pct >= 100 ? 'over' : pct >= 80 ? 'close' : 'fine';
-
+  for (const [category, spent] of pairs) {
+    const share = total > 0 ? (spent / total) * 100 : 0;
     const row = document.createElement('div');
-    row.className = 'budget-row ' + level;
+    row.className = 'spend-row';
     row.innerHTML =
-      '<div class="budget-top">' +
-        '<span class="budget-name">' + escapeHtml(category) + '</span>' +
-        '<span class="budget-figures"><strong>' + fmt(spent) + '</strong>' +
-        '<span class="budget-of">of ' + fmt(cap) + '</span></span>' +
-        '<button type="button" class="del-btn" title="Remove this budget">\u2715</button>' +
+      '<div class="spend-top">' +
+        '<span class="spend-name">' + escapeHtml(category) + '</span>' +
+        '<span class="spend-figures"><strong>' + fmt(spent) + '</strong>' +
+        '<span class="spend-share">' + share.toFixed(1) + '%</span></span>' +
       '</div>' +
-      '<span class="bar-track"><span class="bar-fill" style="width:' + Math.min(pct, 100) + '%"></span></span>' +
-      '<span class="budget-meta">' +
-        (left >= 0
-          ? fmt(left) + ' left · ' + pct.toFixed(0) + '% used'
-          : fmt(Math.abs(left)) + ' over budget') +
-      '</span>';
-
-    row.querySelector('.del-btn').addEventListener('click', () => {
-      delete state.budgets[category];
-      saveSettings();
-      renderAll();
-    });
+      '<span class="bar-track"><span class="bar-fill" style="width:' + share + '%"></span></span>';
     box.appendChild(row);
   }
 }
 
 function refreshCategoryPicker() {
-  const select = $('budgetCategory');
+  const select = $('spendCategory');
   const chosen = select.value;
   select.innerHTML = '';
   for (const category of CATEGORIES()) {
@@ -1266,14 +1262,15 @@ $('deleteRecBtn').addEventListener('click', () => {
   deleteReceivable(id);
 });
 
-$('budgetForm').addEventListener('submit', (e) => {
+$('spendForm').addEventListener('submit', (e) => {
   e.preventDefault();
-  const limit = Number($('budgetAmount').value);
-  if (!(limit > 0)) return alert('Please enter a limit greater than 0.');
-  state.budgets[$('budgetCategory').value] = limit;
-  $('budgetAmount').value = '';
-  saveSettings();
-  renderAll();
+  const amount = Number($('spendAmount').value);
+  if (!(amount > 0)) return alert('Please enter an amount greater than 0.');
+
+  // straight to today, on the salary account, same as any other expense
+  addExpense(dateKey(new Date()), amount, $('spendCategory').value, '');
+  $('spendAmount').value = '';
+  $('spendAmount').focus();
 });
 
 $('accountForm').addEventListener('submit', (e) => {
@@ -1436,7 +1433,7 @@ $('importFile').addEventListener('change', (e) => {
 });
 
 $('resetBtn').addEventListener('click', () => {
-  if (!confirm('This deletes everything — expenses, income, budgets, accounts and anyone who owes you — on this device and in the cloud. Continue?')) return;
+  if (!confirm('This deletes everything — expenses, salary, accounts and anyone who owes you — on this device and in the cloud. Continue?')) return;
   state = defaultState();
   save();
   $('currencySelect').value = state.currency;
@@ -1486,11 +1483,13 @@ initCloud({
     }
     localStorage.setItem(MIGRATED_KEY, '1');
 
+    // entries still filed under a renamed category get corrected in place
+    const renamed = expenses.filter((e) => canonicalCategory(e.category) !== e.category);
+
     state = normalize({
       currency: settings.currency || state.currency,
       defaultIncome: failed.settings ? state.defaultIncome : (Number(settings.defaultIncome) || 0),
       incomes: failed.settings ? state.incomes : (settings.incomes || {}),
-      budgets: failed.settings ? state.budgets : (settings.budgets || {}),
       accounts: failed.settings ? state.accounts : (settings.accounts || []),
       expenses,
       receivables
@@ -1500,6 +1499,11 @@ initCloud({
     $('currencySelect').value = state.currency;
     renderAll();
     if (modalDate) renderModalList();
+
+    if (renamed.length) {
+      const corrected = state.expenses.filter((e) => renamed.some((r) => r.id === e.id));
+      push(() => cloudSaveExpenses(corrected));
+    }
   },
 
   onStatus({ state: kind, message, code, user }) {

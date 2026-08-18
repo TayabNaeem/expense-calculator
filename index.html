@@ -205,21 +205,22 @@
 
     <div class="list-card">
       <div class="list-head">
-        <h3>Your budget</h3>
-        <span class="pill" id="budgetSummary">No budgets set</span>
+        <h3>What you spent</h3>
+        <span class="pill" id="spendSummary">Nothing yet</span>
       </div>
-      <form id="budgetForm" class="budget-form">
+      <form id="spendForm" class="spend-form">
         <div class="field">
-          <label for="budgetCategory">Category</label>
-          <select id="budgetCategory"></select>
+          <label for="spendCategory">Category</label>
+          <select id="spendCategory"></select>
         </div>
         <div class="field">
-          <label for="budgetAmount">Monthly limit</label>
-          <input type="number" id="budgetAmount" min="0" step="any" placeholder="0" inputmode="decimal" required />
+          <label for="spendAmount">Amount spent</label>
+          <input type="number" id="spendAmount" min="0" step="any" placeholder="0" inputmode="decimal" required />
         </div>
-        <button type="submit" class="primary-btn">Set budget</button>
+        <button type="submit" class="primary-btn">Add expense</button>
       </form>
-      <div id="budgetList" class="budget-list"></div>
+      <p class="hint spend-hint">Logged against today and taken off your salary account.</p>
+      <div id="spendList" class="spend-list"></div>
     </div>
   </section>
 
@@ -534,6 +535,7 @@
           <option>Office expense</option>
           <option>Personal</option>
           <option>Love</option>
+          <option>Loan</option>
           <option>Mobile topup</option>
         </select>
       </div>
