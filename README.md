@@ -11,6 +11,8 @@ A clean, no-signup expense tracker. Set your monthly income, tap a date on the c
 - Every expense is subtracted from that month's budget in real time
 - Live stats: income, spent this month, remaining budget
 - Budget progress bar that turns red when you go over
+- Expense list grouped by category, each with its total, share and count —
+  fold a category away, or switch to one flat list
 - Category breakdown for the month
 - Move to any month with the ‹ › arrows
 

@@ -223,6 +223,9 @@ function renderCalendar(key) {
   }
 }
 
+// categories the reader has folded away, kept across re-renders
+const collapsedCategories = new Set();
+
 function renderMonthList(list) {
   const box = $('monthList');
   const ascending = $('sortSelect').value === 'asc';
@@ -235,23 +238,78 @@ function renderMonthList(list) {
   });
   $('listCount').textContent = `${sorted.length} ${sorted.length === 1 ? 'entry' : 'entries'}`;
 
+  box.innerHTML = '';
   if (!sorted.length) {
     box.innerHTML = '<p class="empty">No expenses recorded for this month. Click a date on the calendar to add one.</p>';
     return;
   }
 
-  box.innerHTML = '';
-  for (const e of sorted) box.appendChild(entryRow(e, true));
+  if ($('groupSelect').value === 'none') {
+    box.classList.remove('grouped');
+    for (const e of sorted) box.appendChild(entryRow(e));
+    return;
+  }
+
+  box.classList.add('grouped');
+  const monthTotal = sum(sorted);
+
+  const groups = new Map();
+  for (const e of sorted) {
+    const key = e.category || 'Other';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(e);
+  }
+
+  // biggest spend first, so the categories that matter are at the top
+  const ordered = [...groups.entries()].sort((a, b) => sum(b[1]) - sum(a[1]));
+
+  for (const [category, items] of ordered) {
+    const total = sum(items);
+    const share = monthTotal > 0 ? (total / monthTotal) * 100 : 0;
+
+    const group = document.createElement('details');
+    group.className = 'cat-group';
+    group.open = !collapsedCategories.has(category);
+    group.innerHTML = `
+      <summary class="cat-head">
+        <span class="cat-caret" aria-hidden="true">›</span>
+        <span class="cat-name">${escapeHtml(category)}</span>
+        <span class="pill cat-count">${items.length}</span>
+        <span class="cat-figures">
+          <strong>${fmt(total)}</strong>
+          <small>${share.toFixed(1)}%</small>
+        </span>
+      </summary>
+      <span class="bar-track cat-bar"><span class="bar-fill" style="width:${share}%"></span></span>`;
+
+    const body = document.createElement('div');
+    body.className = 'cat-body';
+    for (const e of items) body.appendChild(entryRow(e, { showCategory: false }));
+    group.appendChild(body);
+
+    group.addEventListener('toggle', () => {
+      if (group.open) collapsedCategories.delete(category);
+      else collapsedCategories.add(category);
+    });
+
+    box.appendChild(group);
+  }
 }
 
-function entryRow(e, showDate) {
+function entryRow(e, { showDate = true, showCategory = true } = {}) {
+  // whichever label is not already implied by the surrounding context leads
+  const primary = showCategory ? (e.category || 'Other')
+    : showDate ? prettyDate(e.date)
+    : 'Expense';
+  const trailing = showCategory && showDate ? prettyDate(e.date) : '';
+
   const row = document.createElement('div');
   row.className = 'entry';
   row.innerHTML = `
     <div class="entry-main">
       <div class="entry-top">
-        <span class="entry-cat">${escapeHtml(e.category || 'Other')}</span>
-        ${showDate ? `<span class="entry-date">${prettyDate(e.date)}</span>` : ''}
+        <span class="entry-cat">${escapeHtml(primary)}</span>
+        ${trailing ? `<span class="entry-date">${trailing}</span>` : ''}
       </div>
       ${e.note ? `<div class="entry-note">${escapeHtml(e.note)}</div>` : ''}
     </div>
@@ -430,7 +488,7 @@ function renderModalList() {
     box.innerHTML = '<p class="empty">Nothing logged for this day yet.</p>';
     return;
   }
-  for (const e of list) box.appendChild(entryRow(e, false));
+  for (const e of list) box.appendChild(entryRow(e, { showDate: false }));
 }
 
 /* ---------------- to-receive tab ---------------- */
@@ -641,6 +699,7 @@ $('nextMonth').addEventListener('click', () => {
 });
 
 $('sortSelect').addEventListener('change', () => renderMonthly());
+$('groupSelect').addEventListener('change', () => renderMonthly());
 
 $('recFilter').addEventListener('change', () => renderReceivables());
 
