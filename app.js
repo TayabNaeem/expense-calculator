@@ -77,6 +77,10 @@ function canonicalCategory(name) {
   return CATEGORY_ALIASES[key] || name || 'Personal';
 }
 
+// the colours a bank card can be given
+const CARD_COLOURS = ['#14808d', '#12996b', '#2d7dd2', '#5b53b8',
+  '#8e6fd4', '#c47f0a', '#e8743b', '#dc3545'];
+
 // enough distinct hues for every category, in the order they rank
 const SLICE_COLOURS = ['#14808d', '#1a9aa8', '#5b53b8', '#8e6fd4', '#dc3545',
   '#e8743b', '#c47f0a', '#12996b', '#2d7dd2', '#8a94a6'];
@@ -127,6 +131,7 @@ function normalize(data) {
     name: a.name || 'Account',
     openingBalance: Number(a.openingBalance) || 0,
     type: a.type || 'other',
+    colour: a.colour || '',
     createdAt: Number(a.createdAt) || 0
   }));
   data.receivables = (data.receivables || []).map((r) => ({
@@ -874,6 +879,36 @@ function balanceOf(account) {
   return account.openingBalance + credited + accountDelta(account.id);
 }
 
+/** An account's own colour, or the one its type implies. */
+function colourOf(account) {
+  if (account.colour) return account.colour;
+  return account.type === 'savings' ? 'var(--good)' : 'var(--accent)';
+}
+
+/** Renders one row of colour choices and remembers which is picked. */
+function buildSwatches(container, chosen) {
+  container.innerHTML = '';
+  container.dataset.colour = chosen || '';
+
+  for (const colour of CARD_COLOURS) {
+    const swatch = document.createElement('button');
+    swatch.type = 'button';
+    swatch.className = 'swatch' + (colour === chosen ? ' selected' : '');
+    swatch.style.background = colour;
+    swatch.setAttribute('role', 'radio');
+    swatch.setAttribute('aria-checked', colour === chosen ? 'true' : 'false');
+    swatch.setAttribute('aria-label', colour);
+    swatch.addEventListener('click', () => {
+      container.dataset.colour = colour;
+      [...container.children].forEach((el) => {
+        el.classList.toggle('selected', el === swatch);
+        el.setAttribute('aria-checked', el === swatch ? 'true' : 'false');
+      });
+    });
+    container.appendChild(swatch);
+  }
+}
+
 function renderAccounts() {
   const net = state.accounts.reduce((t, a) => t + balanceOf(a), 0);
   $('netWorth').textContent = fmt(net);
@@ -906,6 +941,7 @@ function renderAccounts() {
     const card = document.createElement('button');
     card.type = 'button';
     card.className = 'account-card ' + account.type + (headline < 0 ? ' negative' : '');
+    card.style.borderLeftColor = colourOf(account);
     const badge = isSalary ? 'Salary'
       : account.type === 'savings' ? 'Savings' : '';
     card.innerHTML =
@@ -1050,6 +1086,10 @@ function renderAccountModal() {
   if (document.activeElement !== $('accEditName')) $('accEditName').value = account.name;
   if (document.activeElement !== $('accEditBalance')) $('accEditBalance').value = account.openingBalance;
   if (document.activeElement !== $('accEditType')) $('accEditType').value = account.type;
+  if ($('accEditColour').dataset.forAccount !== account.id) {
+    buildSwatches($('accEditColour'), account.colour || '');
+    $('accEditColour').dataset.forAccount = account.id;
+  }
 
   const credited = account.type === 'salary' ? totalIncomeTillNow() : 0;
   $('accOpening').textContent = credited
@@ -1542,9 +1582,12 @@ $('accountForm').addEventListener('submit', (e) => {
 
   state.accounts.push({
     id: newId(), name, openingBalance: balance,
-    type: $('accType').value, createdAt: Date.now()
+    type: $('accType').value,
+    colour: $('accColour').dataset.colour || '',
+    createdAt: Date.now()
   });
   e.target.reset();
+  buildSwatches($('accColour'), '');
   saveSettings();
   renderAll();
   $('accName').focus();
@@ -1562,6 +1605,7 @@ $('accountEditForm').addEventListener('submit', (e) => {
   account.name = name;
   account.openingBalance = balance;
   account.type = $('accEditType').value;
+  account.colour = $('accEditColour').dataset.colour || '';
   saveSettings();
   renderAll();
 });
@@ -2074,6 +2118,7 @@ $('signOutBtn').addEventListener('click', async () => {
 /* ---------------- boot ---------------- */
 
 $('currencySelect').value = state.currency;
+buildSwatches($('accColour'), '');
 $('recDate').value = dateKey(new Date());
 save();        // persist the normalised shape for anything upgraded by load()
 renderAll();
