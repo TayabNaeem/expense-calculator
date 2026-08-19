@@ -92,6 +92,11 @@
 <div id="appShell" hidden>
 
 <header class="topbar">
+  <button type="button" id="menuBtn" class="icon-round" aria-label="Open menu" aria-expanded="false" aria-controls="drawer">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true">
+      <path d="M4 7h16M4 12h16M4 17h16" />
+    </svg>
+  </button>
   <div class="brand">
     <span class="brand-mark" aria-hidden="true">
       <svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.6"
@@ -107,22 +112,10 @@
     </span>
     <div>
       <h1>Expense Calculator</h1>
-      <p class="brand-sub">Budget, tracked day by day</p>
+      <p class="brand-sub" id="brandSub">Home</p>
     </div>
   </div>
   <div class="topbar-actions">
-    <select id="currencySelect" class="mini-select" title="Currency">
-      <option value="PKR">₨ PKR</option>
-      <option value="INR">₹ INR</option>
-      <option value="USD">$ USD</option>
-      <option value="EUR">€ EUR</option>
-      <option value="GBP">£ GBP</option>
-      <option value="AED">د.إ AED</option>
-      <option value="SAR">﷼ SAR</option>
-    </select>
-    <button id="exportBtn" class="ghost-btn" title="Download a backup of your data">Export</button>
-    <button id="importBtn" class="ghost-btn" title="Restore from a backup file">Import</button>
-    <input type="file" id="importFile" accept="application/json" hidden />
     <button id="profileBtn" class="avatar-btn" title="Your profile">
       <img id="avatarImg" alt="" hidden />
       <span id="avatarInitial">?</span>
@@ -130,8 +123,13 @@
   </div>
 </header>
 
-<div id="banner" class="banner" hidden><span id="bannerText"></span></div>
 
+<div class="drawer-backdrop" id="drawerBackdrop"></div>
+<aside class="drawer" id="drawer" aria-label="Pages">
+  <div class="drawer-head">
+    <span class="drawer-title">Menu</span>
+    <button type="button" id="closeDrawer" class="icon-btn" aria-label="Close menu">&#10005;</button>
+  </div>
 <nav class="tabs" role="tablist">
   <button class="tab active" role="tab" data-tab="home">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg>
@@ -150,6 +148,11 @@
     <span>Savings</span>
   </button>
 </nav>
+</aside>
+
+<div id="banner" class="banner" hidden><span id="bannerText"></span></div>
+
+
 
 <main>
   <!-- ============ MONTHLY TAB ============ -->
@@ -544,7 +547,11 @@
   </section>
 </main>
 
-<button type="button" id="fab" class="fab" title="Add an expense" aria-label="Add an expense">+</button>
+<button type="button" id="fab" class="fab" title="Add an expense" aria-label="Add an expense">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true">
+    <path d="M12 5v14M5 12h14" />
+  </svg>
+</button>
 
 <footer class="foot">Entries are saved to your own Firebase account and cached in this browser, so it keeps working offline.</footer>
 </div><!-- /appShell -->
@@ -650,6 +657,27 @@
       </div>
       <button type="submit" class="primary-btn wide">Update password</button>
     </form>
+
+    <div class="profile-section">
+      <h4>Preferences</h4>
+      <div class="field">
+        <label for="currencySelect">Currency</label>
+        <select id="currencySelect" class="mini-select" title="Currency">
+      <option value="PKR">₨ PKR</option>
+      <option value="INR">₹ INR</option>
+      <option value="USD">$ USD</option>
+      <option value="EUR">€ EUR</option>
+      <option value="GBP">£ GBP</option>
+      <option value="AED">د.إ AED</option>
+      <option value="SAR">﷼ SAR</option>
+    </select>
+      </div>
+      <div class="photo-actions">
+        <button type="button" id="exportBtn" class="ghost-btn" title="Download a backup of your data">Export backup</button>
+        <button type="button" id="importBtn" class="ghost-btn" title="Restore from a backup file">Import backup</button>
+        <input type="file" id="importFile" accept="application/json" hidden />
+      </div>
+    </div>
 
     <p class="profile-note" id="googleNote" hidden>
       You signed in with Google, so your password is managed by Google.

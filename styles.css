@@ -1,4 +1,6 @@
 :root {
+  --page: 1360px;
+
   /* keeps native controls — spinners, date pickers, select popups,
      scrollbars — in step with the light surface */
   color-scheme: light;
@@ -48,7 +50,7 @@ body {
   gap: 16px;
   flex-wrap: wrap;
   padding: 20px clamp(16px, 4vw, 40px) 10px;
-  max-width: 1120px;
+  max-width: var(--page);
   margin: 0 auto;
 }
 
@@ -94,7 +96,7 @@ body {
 .tabs {
   display: flex;
   gap: 6px;
-  max-width: 1120px;
+  max-width: var(--page);
   margin: 10px auto 0;
   padding: 6px;
   background: var(--bg-2);
@@ -123,7 +125,7 @@ body {
   box-shadow: 0 4px 12px rgba(20, 128, 141, .25);
 }
 
-main { max-width: 1120px; margin: 0 auto; padding: 18px clamp(16px, 4vw, 40px); }
+main { max-width: var(--page); margin: 0 auto; padding: 18px clamp(16px, 4vw, 40px); }
 .panel { display: none; animation: fade .25s ease; }
 .panel.active { display: block; }
 @keyframes fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
@@ -587,7 +589,7 @@ body.booting .auth-screen, body.booting #appShell { visibility: hidden; }
 
 /* ---------- banner ---------- */
 .banner {
-  max-width: 1120px;
+  max-width: var(--page);
   margin: 0 auto 14px;
   width: calc(100% - clamp(32px, 8vw, 80px));
   background: rgba(196, 127, 10, .10);
@@ -956,13 +958,15 @@ body.booting .auth-screen, body.booting #appShell { visibility: hidden; }
   border: 0; border-radius: 50%;
   background: linear-gradient(140deg, var(--accent), var(--accent-2));
   color: var(--on-accent);
-  font-size: 30px; line-height: 1;
-  font-family: inherit;
+  /* grid centring, not a text baseline — the glyph never sat true */
+  display: grid; place-items: center;
+  padding: 0;
   cursor: pointer;
   box-shadow: 0 8px 22px rgba(20, 128, 141, .4);
   z-index: 40;
-  transition: .16s;
+  transition: box-shadow .16s ease;
 }
+.fab svg { width: 26px; height: 26px; display: block; }
 .fab:hover { transform: translateX(-50%) translateY(-2px); box-shadow: 0 12px 26px rgba(20, 128, 141, .45); }
 
 /* ---------- page headings ---------- */
@@ -1018,3 +1022,66 @@ main { padding-bottom: 92px; }
 .rec-row.owing .bar-fill { background: linear-gradient(90deg, var(--danger), #e8737f); }
 .rec-row.owing.settled .rec-avatar { background: linear-gradient(140deg, var(--good), #1fb37f); }
 .receivable-form .field.wide { grid-column: 1 / -1; }
+
+/* ---------- menu button ---------- */
+.icon-round {
+  width: 42px; height: 42px;
+  display: grid; place-items: center;
+  border: 1px solid var(--line);
+  background: var(--bg-2);
+  color: var(--text);
+  border-radius: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: var(--shadow-sm);
+}
+.icon-round:hover { border-color: var(--accent); color: var(--accent); }
+.icon-round svg { width: 21px; height: 21px; }
+
+.topbar { justify-content: flex-start; gap: 14px; }
+.topbar .brand { flex: 1; min-width: 0; }
+
+/* ---------- drawer ---------- */
+.drawer-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(22, 35, 46, .42);
+  opacity: 0; pointer-events: none;
+  transition: opacity .2s ease;
+  z-index: 55;
+}
+body.drawer-open .drawer-backdrop { opacity: 1; pointer-events: auto; }
+
+.drawer {
+  position: fixed; top: 0; left: 0; bottom: 0;
+  width: min(280px, 84vw);
+  background: var(--bg-2);
+  border-right: 1px solid var(--line);
+  box-shadow: 8px 0 28px rgba(20, 40, 60, .12);
+  padding: 16px;
+  display: flex; flex-direction: column; gap: 14px;
+  transform: translateX(-100%);
+  visibility: hidden;
+  transition: transform .22s ease;
+  z-index: 60;
+}
+body.drawer-open .drawer { transform: none; visibility: visible; }
+
+.drawer-head { display: flex; align-items: center; justify-content: space-between; }
+.drawer-title { font-size: 12px; text-transform: uppercase; letter-spacing: .7px; color: var(--muted); }
+
+/* the nav becomes a vertical list inside the drawer */
+.drawer .tabs {
+  flex-direction: column;
+  width: auto; max-width: none;
+  margin: 0; padding: 0;
+  background: transparent;
+  border: 0; border-radius: 0;
+  gap: 4px;
+}
+.drawer .tab {
+  flex: none;
+  justify-content: flex-start;
+  padding: 13px 14px;
+  font-size: 14.5px;
+}
+.drawer .tab.active { box-shadow: none; }

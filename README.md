@@ -6,7 +6,10 @@ syncs to your own Firebase project and keeps working offline.
 
 ## Features
 
-Four pages, following the layout of the reference app.
+Four pages, following the layout of the reference app, reached from the menu
+drawer behind the button in the top left. The header shows which page you are
+on; your avatar opens the profile, which holds the currency picker and the
+backup buttons.
 
 **Home**
 - What you have: every account with its balance and a combined net figure,

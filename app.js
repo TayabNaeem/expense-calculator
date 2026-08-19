@@ -1420,8 +1420,30 @@ document.querySelectorAll('.tab').forEach((tab) => {
     document.querySelectorAll('.panel').forEach((p) => p.classList.remove('active'));
     tab.classList.add('active');
     $('panel-' + tab.dataset.tab).classList.add('active');
+    // the header names the page, since the tabs are no longer on screen
+    $('brandSub').textContent = tab.querySelector('span').textContent;
+    closeDrawer();
   });
 });
+
+/* ---------------- menu drawer ---------------- */
+
+function openDrawer() {
+  document.body.classList.add('drawer-open');
+  $('menuBtn').setAttribute('aria-expanded', 'true');
+  $('closeDrawer').focus();
+}
+
+function closeDrawer() {
+  document.body.classList.remove('drawer-open');
+  $('menuBtn').setAttribute('aria-expanded', 'false');
+}
+
+$('menuBtn').addEventListener('click', () => {
+  document.body.classList.contains('drawer-open') ? closeDrawer() : openDrawer();
+});
+$('closeDrawer').addEventListener('click', closeDrawer);
+$('drawerBackdrop').addEventListener('click', closeDrawer);
 
 /** The summary cards quote the month on screen, so they move with it. */
 function goToMonth(date) {
@@ -1635,6 +1657,7 @@ $('closeModal').addEventListener('click', closeModal);
 $('modal').addEventListener('click', (e) => { if (e.target === $('modal')) closeModal(); });
 document.addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
+  if (document.body.classList.contains('drawer-open')) return closeDrawer();
   if (!$('modal').hidden) closeModal();
   else if (!$('recModal').hidden) closeReceivableModal();
   else if (!$('accountModal').hidden) closeAccountModal();
