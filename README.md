@@ -11,7 +11,8 @@ Four pages, following the layout of the reference app.
 - Your monthly expense: donut chart with a colour-coded legend
 - What you spent: enter an amount against a category and it is logged as an
   expense for today, straight off the salary account, with the month's running
-  split underneath
+  split underneath. Pick *Saving* instead and the money moves into the savings
+  account rather than being spent
 
 **Money**
 - Salary for the month, or one default that applies to every month
@@ -32,9 +33,25 @@ Four pages, following the layout of the reference app.
 
 **Accounts and salary**
 
-Mark one account as *salary* and one as *savings*. Salary is credited to its
-account, and expenses come out of it by default, so the balance tracks what is
-actually left. Naming a different account on an expense overrides that.
+Mark one account as *salary* and one as *savings*, on the card when you add it
+or by opening it later. Salary is credited to its account and expenses come out
+of it by default, so the balance tracks what is actually left. Naming a
+different account on an entry overrides that.
+
+**Three kinds of entry**
+
+Every entry is one of three things, chosen when you add it:
+
+| Kind | Effect on the account | Counts as spending |
+| --- | --- | --- |
+| Expense | money out | yes |
+| Credited to me | money in | no |
+| Moved into savings | out of salary, into savings | no |
+
+Credits and transfers are listed separately under *Money in and savings* on the
+Money page. Neither inflates what you have spent — a transfer has not been used
+up, and a credit is not spending at all — so the net figure across your accounts
+is unchanged by moving money between them.
 
 Categories: Home, Family, Food and drink, Petrol, Office expense, Personal,
 Love, Loan, Mobile topup.

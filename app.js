@@ -62,6 +62,12 @@ const CATEGORY_ALIASES = {
   'load': 'Mobile topup'
 };
 
+/** Only money actually used up counts as spending. */
+const kindOf = (e) => e.kind || 'expense';
+const isSpend = (e) => kindOf(e) === 'expense';
+
+const SAVING_OPTION = '__saving__';
+
 function canonicalCategory(name) {
   const key = String(name || '').trim().toLowerCase();
   return CATEGORY_ALIASES[key] || name || 'Personal';
@@ -105,6 +111,8 @@ function normalize(data) {
     amount: Number(e.amount) || 0,
     createdAt: Number(e.createdAt) || Number(e.id) || 0,
     category: canonicalCategory(e.category),
+    kind: kindOf(e),
+    toAccountId: e.toAccountId || '',
     settled: e.settled === true,
     settledOn: e.settledOn || '',
     accountId: e.accountId || ''
@@ -189,7 +197,7 @@ function expensesFor(key) {
 
 /** Expenses for a month that still count as spending. */
 function activeFor(key) {
-  return expensesFor(key).filter((e) => !e.settled);
+  return expensesFor(key).filter((e) => isSpend(e) && !e.settled);
 }
 
 function sum(list) {
@@ -203,8 +211,9 @@ function renderMonthly() {
   const income = incomeFor(key);
   const monthExpenses = expensesFor(key);
   // reimbursed money left your pocket and came back, so it is not spending
-  const active = monthExpenses.filter((e) => !e.settled);
-  const settled = monthExpenses.filter((e) => e.settled);
+  const active = monthExpenses.filter((e) => isSpend(e) && !e.settled);
+  const settled = monthExpenses.filter((e) => isSpend(e) && e.settled);
+  const moves = monthExpenses.filter((e) => !isSpend(e));
   const spent = sum(active);
   const settledTotal = sum(settled);
   const remaining = income - spent;
@@ -234,6 +243,7 @@ function renderMonthly() {
   renderCalendar(active);
   renderMonthList(active);
   renderSettled(settled, key);
+  renderMoves(moves);
   const byCategory = groupBy(active, 'category');
   renderDonut(byCategory);
   renderBars($('categoryBreakdown'), byCategory, 'No expenses this month yet.');
@@ -390,9 +400,9 @@ function escapeHtml(str) {
 function renderTotal() {
   // the totals tab has to agree with the monthly one, so settled is excluded
   // from spending here as well
-  const active = state.expenses.filter((e) => !e.settled);
+  const active = state.expenses.filter((e) => isSpend(e) && !e.settled);
   const totalSpent = sum(active);
-  const totalSettled = sum(state.expenses.filter((e) => e.settled));
+  const totalSettled = sum(state.expenses.filter((e) => isSpend(e) && e.settled));
 
   // months that matter: any month with an expense, plus any month with a saved income
   const sortedKeys = activeMonths();
@@ -475,19 +485,33 @@ function renderBars(container, data, emptyMsg, sortDesc = true) {
 
 /* ---------------- expense actions ---------------- */
 
-function addExpense(date, amount, category, note, accountId = '') {
-  // an expense with no account named still has to come from somewhere
+function addExpense(date, amount, category, note, accountId = '', kind = 'expense') {
+  // an entry with no account named still has to come from somewhere
   if (!accountId) {
-    const salary = salaryAccount();
-    if (salary) accountId = salary.id;
+    const fallback = kind === 'credit' ? (salaryAccount() || state.accounts[0]) : salaryAccount();
+    if (fallback) accountId = fallback.id;
   }
+
+  // a transfer needs somewhere to land
+  let toAccountId = '';
+  if (kind === 'saving') {
+    const savings = savingsAccount();
+    if (!savings) {
+      alert('Mark one of your accounts as Savings on the Home page first, so the money has somewhere to go.');
+      return false;
+    }
+    toAccountId = savings.id;
+  }
+
   const expense = {
     id: newId(),
     date,
     amount: Number(amount),
-    category,
+    category: kind === 'expense' ? category : (kind === 'saving' ? 'Saving' : 'Credit'),
     note: note.trim(),
     accountId,
+    toAccountId,
+    kind,
     createdAt: Date.now()
   };
 
@@ -497,6 +521,7 @@ function addExpense(date, amount, category, note, accountId = '') {
   save();
   renderAll();
   push(() => cloudAddExpense(expense));
+  return true;
 }
 
 function deleteExpense(id) {
@@ -536,6 +561,8 @@ function openModal(dateStr) {
   $('expDate').value = dateStr;
   $('expAmount').value = '';
   $('expNote').value = '';
+  $('expKind').value = 'expense';
+  syncKindFields();
   $('modal').hidden = false;
   renderModalList();
   setTimeout(() => $('expAmount').focus(), 50);
@@ -694,6 +721,39 @@ function renderDonut(totals) {
   });
 }
 
+function renderMoves(moves) {
+  const card = $('movesCard');
+  card.hidden = !moves.length;
+  if (!moves.length) return;
+
+  const credited = sum(moves.filter((e) => kindOf(e) === 'credit'));
+  const saved = sum(moves.filter((e) => kindOf(e) === 'saving'));
+  $('movesSummary').textContent = [
+    credited ? fmt(credited) + ' in' : '',
+    saved ? fmt(saved) + ' saved' : ''
+  ].filter(Boolean).join(' · ');
+
+  const box = $('movesList');
+  box.innerHTML = '';
+  for (const e of [...moves].sort((a, b) => b.date.localeCompare(a.date))) {
+    const saving = kindOf(e) === 'saving';
+    const row = document.createElement('div');
+    row.className = 'entry move-entry';
+    row.innerHTML =
+      '<div class="entry-main">' +
+        '<div class="entry-top">' +
+          '<span class="entry-cat">' + (saving ? 'Moved to savings' : 'Credited') + '</span>' +
+          '<span class="entry-date">' + prettyDate(e.date) + '</span>' +
+        '</div>' +
+        (e.note ? '<div class="entry-note">' + escapeHtml(e.note) + '</div>' : '') +
+      '</div>' +
+      '<span class="entry-amt good-text">+' + fmt(e.amount) + '</span>' +
+      '<button class="del-btn" title="Delete">\u2715</button>';
+    row.querySelector('.del-btn').addEventListener('click', () => deleteExpense(e.id));
+    box.appendChild(row);
+  }
+}
+
 /* ---------------- quick spend entry ---------------- */
 
 function renderSpending(active) {
@@ -735,6 +795,14 @@ function refreshCategoryPicker() {
     option.textContent = category;
     select.appendChild(option);
   }
+
+  const saving = document.createElement('option');
+  saving.value = SAVING_OPTION;
+  saving.textContent = savingsAccount()
+    ? 'Saving \u2192 ' + savingsAccount().name
+    : 'Saving (mark an account as Savings first)';
+  select.appendChild(saving);
+
   if (chosen) select.value = chosen;
 }
 
@@ -742,7 +810,25 @@ function refreshCategoryPicker() {
 
 /** Reimbursed expenses came back, so they do not reduce a balance. */
 function spentFromAccount(id) {
-  return sum(state.expenses.filter((e) => e.accountId === id && !e.settled));
+  return sum(state.expenses.filter((e) => isSpend(e) && e.accountId === id && !e.settled));
+}
+
+/** Everything an account has gained or lost since its opening balance. */
+function accountDelta(id) {
+  let delta = 0;
+  for (const e of state.expenses) {
+    const amount = Number(e.amount) || 0;
+    const kind = kindOf(e);
+    if (kind === 'credit') {
+      if (e.accountId === id) delta += amount;
+    } else if (kind === 'saving') {
+      if (e.accountId === id) delta -= amount;      // left the source
+      if (e.toAccountId === id) delta += amount;    // landed in savings
+    } else if (!e.settled && e.accountId === id) {
+      delta -= amount;
+    }
+  }
+  return delta;
 }
 
 /** The account salary is paid into, and that expenses come out of by default. */
@@ -771,7 +857,7 @@ function totalIncomeTillNow() {
 function balanceOf(account) {
   // salary is credited to its account; everything else starts from its opening
   const credited = account.type === 'salary' ? totalIncomeTillNow() : 0;
-  return account.openingBalance + credited - spentFromAccount(account.id);
+  return account.openingBalance + credited + accountDelta(account.id);
 }
 
 function renderAccounts() {
@@ -889,11 +975,12 @@ function renderSavings() {
     : 'Add an account on Home and mark it as Savings';
 
   const income = totalIncomeTillNow();
-  const spent = sum(state.expenses.filter((e) => !e.settled));
+  const spent = sum(state.expenses.filter((e) => isSpend(e) && !e.settled));
   const owed = state.receivables.reduce((t, r) => t + remainingOf(r), 0);
 
   $('sIncome').textContent = fmt(income);
   $('sSpent').textContent = fmt(spent);
+  $('sMoved').textContent = fmt(sum(state.expenses.filter((e) => kindOf(e) === 'saving')));
   $('sKept').textContent = fmt(income - spent);
   $('sKept').classList.toggle('over', income - spent < 0);
   $('sOwed').textContent = fmt(owed);
@@ -927,7 +1014,7 @@ function renderInsights() {
 
   $('iDaily').textContent = fmt(thisTotal / now.getDate());
 
-  const keys = [...new Set(state.expenses.filter((e) => !e.settled).map((e) => monthOf(e.date)))].sort();
+  const keys = [...new Set(state.expenses.filter((e) => isSpend(e) && !e.settled).map((e) => monthOf(e.date)))].sort();
   const monthTotals = keys.map((k) => ({ key: k, total: sum(activeFor(k)) }));
 
   $('iAvgMonth').textContent = monthTotals.length
@@ -938,7 +1025,7 @@ function renderInsights() {
   $('iPeak').textContent = peak ? fmt(peak.total) : '—';
   $('iPeak').title = peak ? monthTitle(peak.key) : '';
 
-  const allCategories = groupBy(state.expenses.filter((e) => !e.settled), 'category');
+  const allCategories = groupBy(state.expenses.filter((e) => isSpend(e) && !e.settled), 'category');
   const top = Object.entries(allCategories).sort((a, b) => b[1] - a[1])[0];
   $('iTopCat').textContent = top ? top[0] : '—';
   $('iTopCat').title = top ? fmt(top[1]) + ' all time' : '';
@@ -1267,8 +1354,11 @@ $('spendForm').addEventListener('submit', (e) => {
   const amount = Number($('spendAmount').value);
   if (!(amount > 0)) return alert('Please enter an amount greater than 0.');
 
-  // straight to today, on the salary account, same as any other expense
-  addExpense(dateKey(new Date()), amount, $('spendCategory').value, '');
+  // picking Saving moves the money instead of spending it
+  const choice = $('spendCategory').value;
+  const kind = choice === SAVING_OPTION ? 'saving' : 'expense';
+  if (!addExpense(dateKey(new Date()), amount, choice, '', '', kind)) return;
+
   $('spendAmount').value = '';
   $('spendAmount').focus();
 });
@@ -1371,7 +1461,9 @@ $('expenseForm').addEventListener('submit', (e) => {
   if (!date) return alert('Please pick a date.');
   if (!(amount > 0)) return alert('Please enter an amount greater than 0.');
 
-  addExpense(date, amount, $('expCategory').value, $('expNote').value, $('expAccount').value);
+  const kind = $('expKind').value;
+  if (!addExpense(date, amount, $('expCategory').value, $('expNote').value,
+                  $('expAccount').value, kind)) return;
 
   // stay on the day that was just used, so several entries can be added quickly
   modalDate = date;
@@ -1381,6 +1473,16 @@ $('expenseForm').addEventListener('submit', (e) => {
   $('expAmount').focus();
   renderModalList();
 });
+
+$('expKind').addEventListener('change', syncKindFields);
+
+/** The wording, and whether a category applies, follow the kind of entry. */
+function syncKindFields() {
+  const kind = $('expKind').value;
+  $('expAccountLabel').textContent =
+    kind === 'credit' ? 'Credited to' : kind === 'saving' ? 'Taken from' : 'Paid from';
+  $('expCategory').closest('.field').hidden = kind !== 'expense';
+}
 
 $('closeModal').addEventListener('click', closeModal);
 $('modal').addEventListener('click', (e) => { if (e.target === $('modal')) closeModal(); });

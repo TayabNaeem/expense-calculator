@@ -307,6 +307,15 @@
       <p class="hint settled-hint">Reimbursed — not counted in this month's spending.</p>
       <div id="settledList" class="entries grouped"></div>
     </div>
+    <div class="list-card" id="movesCard" hidden>
+      <div class="list-head">
+        <h3>Money in and savings</h3>
+        <span class="pill" id="movesSummary"></span>
+      </div>
+      <p class="hint settled-hint">Not counted as spending — these move money rather than use it up.</p>
+      <div id="movesList" class="entries"></div>
+    </div>
+
     <div class="breakdown-card">
       <h3>Category breakdown</h3>
       <div id="categoryBreakdown" class="bars"></div>
@@ -437,6 +446,10 @@
         <span class="stat-value good" id="sKept">—</span>
       </div>
       <div class="stat">
+        <span class="stat-label">Moved into savings</span>
+        <span class="stat-value good" id="sMoved">—</span>
+      </div>
+      <div class="stat">
         <span class="stat-label">Still owed to you</span>
         <span class="stat-value" id="sOwed">—</span>
       </div>
@@ -517,6 +530,14 @@
     </div>
 
     <form id="expenseForm" class="expense-form">
+      <div class="field wide">
+        <label for="expKind">This entry is</label>
+        <select id="expKind">
+          <option value="expense">An expense — money out</option>
+          <option value="credit">Credited to me — money in</option>
+          <option value="saving">Moved into savings</option>
+        </select>
+      </div>
       <div class="field">
         <label for="expDate">Date</label>
         <input type="date" id="expDate" required />
@@ -540,7 +561,7 @@
         </select>
       </div>
       <div class="field">
-        <label for="expAccount">Paid from</label>
+        <label for="expAccount" id="expAccountLabel">Paid from</label>
         <select id="expAccount"></select>
       </div>
       <div class="field wide">
