@@ -1583,11 +1583,10 @@ $('accountForm').addEventListener('submit', (e) => {
   state.accounts.push({
     id: newId(), name, openingBalance: balance,
     type: $('accType').value,
-    colour: $('accColour').dataset.colour || '',
+    colour: '',
     createdAt: Date.now()
   });
   e.target.reset();
-  buildSwatches($('accColour'), '');
   saveSettings();
   renderAll();
   $('accName').focus();
@@ -2118,7 +2117,6 @@ $('signOutBtn').addEventListener('click', async () => {
 /* ---------------- boot ---------------- */
 
 $('currencySelect').value = state.currency;
-buildSwatches($('accColour'), '');
 $('recDate').value = dateKey(new Date());
 save();        // persist the normalised shape for anything upgraded by load()
 renderAll();

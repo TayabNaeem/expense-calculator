@@ -54,8 +54,8 @@ together — the salary card carries what is left on its second line.
 **Accounts and salary**
 
 Mark one account as *salary* and one as *savings*, on the card when you add it
-or by opening it later, and pick a colour for its card while you are there.
-An account with no colour of its own takes the one its type implies. Salary is credited to its account and expenses come out
+or by opening it later. Opening it is also where you pick a colour for its
+card; until you do, it takes the one its type implies. Salary is credited to its account and expenses come out
 of it by default, so the balance tracks what is actually left. Naming a
 different account on an entry overrides that.
 
