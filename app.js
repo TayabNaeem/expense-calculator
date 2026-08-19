@@ -891,18 +891,29 @@ function renderAccounts() {
   for (const account of [...state.accounts].sort((a, b) => balanceOf(b) - balanceOf(a))) {
     const balance = balanceOf(account);
     const spent = spentFromAccount(account.id);
+    const isSalary = account.type === 'salary';
+
+    // the salary card states the salary that was set and stays there; what is
+    // left of it lives on its own card, so this figure does not drift down as
+    // the month goes on
+    const pools = isSalary ? salaryPools() : null;
+    const headline = isSalary ? pools.salaryTotal : balance;
+    const meta = isSalary
+      ? (spent > 0 ? fmt(spent) + ' spent · ' + fmt(pools.remaining) + ' left' : 'nothing spent yet')
+      : (spent > 0 ? fmt(spent) + ' spent' : 'nothing spent yet');
+
     const card = document.createElement('button');
     card.type = 'button';
-    card.className = 'account-card ' + account.type + (balance < 0 ? ' negative' : '');
-    const badge = account.type === 'salary' ? 'Salary'
+    card.className = 'account-card ' + account.type + (headline < 0 ? ' negative' : '');
+    const badge = isSalary ? 'Salary'
       : account.type === 'savings' ? 'Savings' : '';
     card.innerHTML =
       '<span class="account-top">' +
         '<span class="account-name">' + escapeHtml(account.name) + '</span>' +
         (badge ? '<span class="account-badge">' + badge + '</span>' : '') +
       '</span>' +
-      '<span class="account-balance">' + fmt(balance) + '</span>' +
-      '<span class="account-meta">' + (spent > 0 ? fmt(spent) + ' spent' : 'nothing spent yet') + '</span>';
+      '<span class="account-balance">' + fmt(headline) + '</span>' +
+      '<span class="account-meta">' + meta + '</span>';
     card.addEventListener('click', () => openAccount(account.id));
     grid.appendChild(card);
   }
@@ -911,39 +922,34 @@ function renderAccounts() {
 }
 
 /**
- * Splits what the salary account holds into the salary itself and anything
- * credited on top. Spending draws the salary down first; only once that is
- * gone does it start eating into the extra, which is what stops the salary
- * figure running negative while money is genuinely still there.
+ * The salary account seen as three fixed quantities plus one moving one: the
+ * salary that was set, anything credited on top, what has been spent, and
+ * what is therefore left. Only the last of those moves as you spend, which is
+ * why the account card and the extra card hold steady.
  *
- * salaryLeft + extraLeft always equals the salary account balance.
+ * salaryTotal + extraTotal - spent === remaining === balanceOf(salary)
  */
 function salaryPools() {
   const salary = salaryAccount();
   if (!salary) {
-    return { salaryTotal: 0, salaryLeft: 0, extraTotal: 0, extraLeft: 0, drawnFromExtra: 0 };
+    return { salaryTotal: 0, extraTotal: 0, spent: 0, remaining: 0 };
   }
 
   // however the salary was recorded: as the opening balance, month by month,
   // or both
   const salaryTotal = salary.openingBalance + totalIncomeTillNow();
 
-  // money paid in on top of the salary, minus anything moved out to savings
+  // money paid in on top of the salary, less anything moved out to savings
   const credited = sum(state.expenses.filter(
     (e) => kindOf(e) === 'credit' && e.accountId === salary.id));
   const movedOut = sum(state.expenses.filter(
     (e) => kindOf(e) === 'saving' && e.accountId === salary.id));
-  const extraTotal = credited - movedOut;
-
-  const spent = spentFromAccount(salary.id);
-  const drawnFromExtra = Math.max(0, spent - salaryTotal);
 
   return {
     salaryTotal,
-    salaryLeft: Math.max(0, salaryTotal - spent),
-    extraTotal,
-    extraLeft: extraTotal - drawnFromExtra,
-    drawnFromExtra
+    extraTotal: credited - movedOut,
+    spent: spentFromAccount(salary.id),
+    remaining: balanceOf(salary)
   };
 }
 
@@ -969,20 +975,18 @@ function renderAccountSummary(grid) {
     : fmt(spentThisMonth) + ' spent in ' + monthLabel;
 
   grid.appendChild(summaryCard(
+    'Extra credited', pools.extraTotal,
+    pools.extraTotal > 0 ? 'on top of the salary' : 'nothing credited yet',
+    'extra'));
+
+  grid.appendChild(summaryCard(
     'Total expense', spentAllTime,
     fmt(spentThisMonth) + ' in ' + monthLabel, 'expense'));
 
   grid.appendChild(summaryCard(
-    'Remaining from salary', pools.salaryLeft,
+    'Remaining from salary', pools.remaining,
     salary ? monthMeta : 'no salary account yet',
-    pools.salaryLeft <= 0 ? 'drained' : 'remaining'));
-
-  grid.appendChild(summaryCard(
-    'Extra credited', pools.extraLeft,
-    pools.drawnFromExtra > 0
-      ? fmt(pools.drawnFromExtra) + ' covering overspend'
-      : (pools.extraTotal > 0 ? fmt(pools.extraTotal) + ' credited in' : 'nothing credited yet'),
-    pools.extraLeft < 0 ? 'negative' : 'extra'));
+    pools.remaining < 0 ? 'negative' : 'remaining'));
 }
 
 function summaryCard(title, amount, meta, tone) {
@@ -1076,15 +1080,19 @@ function renderSavings() {
     ? savings.name
     : 'Add an account on Home and mark it as Savings';
 
-  const income = totalIncomeTillNow();
+  // read the salary the same way Home does, so a salary recorded as an
+  // opening balance is not reported as nothing received
+  const pools = salaryPools();
+  const income = pools.salaryTotal + pools.extraTotal || totalIncomeTillNow();
   const spent = sum(state.expenses.filter((e) => isSpend(e) && !e.settled));
+  const kept = salaryAccount() ? pools.remaining : income - spent;
   const owed = state.receivables.reduce((t, r) => t + remainingOf(r), 0);
 
   $('sIncome').textContent = fmt(income);
   $('sSpent').textContent = fmt(spent);
   $('sMoved').textContent = fmt(sum(state.expenses.filter((e) => kindOf(e) === 'saving')));
-  $('sKept').textContent = fmt(income - spent);
-  $('sKept').classList.toggle('over', income - spent < 0);
+  $('sKept').textContent = fmt(kept);
+  $('sKept').classList.toggle('over', kept < 0);
   $('sOwed').textContent = fmt(owed);
 }
 
