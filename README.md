@@ -15,8 +15,9 @@ Four pages, following the layout of the reference app.
 
 The salary card states the salary you set and stays there; the extra card
 states what was credited on top and stays there too. Only *Remaining from
-salary* moves as you spend, and it always equals the salary you set, plus
-anything credited, less everything spent.
+salary* moves, and it always holds to:
+
+    salary set + extra credited − total expense = remaining
 
 The net figure at the top of the page uses what is genuinely left rather
 than the salary card's headline, so it will not match the cards added
@@ -55,16 +56,18 @@ different account on an entry overrides that.
 
 Every entry is one of three things, chosen when you add it:
 
-| Kind | Effect on the account | Counts as spending |
+| Kind | Effect on the account | Counts as an outgoing |
 | --- | --- | --- |
 | Expense | money out | yes |
 | Credited to me | money in | no |
-| Moved into savings | out of salary, into savings | no |
+| Moved into savings | out of salary, into savings | yes |
 
-Credits and transfers are listed separately under *Money in and savings* on the
-Money page. Neither inflates what you have spent — a transfer has not been used
-up, and a credit is not spending at all — so the net figure across your accounts
-is unchanged by moving money between them.
+A move into savings leaves the salary account, so it counts as an outgoing and
+appears in the total under a *Saving* category. It is still not money gone —
+the savings account gains exactly what the salary account loses, so the net
+figure across your accounts does not move.
+
+Credits are listed on their own under *Money credited in* on the Money page.
 
 Categories: Home, Family, Food and drink, Petrol, Office expense, Personal,
 Love, Loan, Mobile topup.

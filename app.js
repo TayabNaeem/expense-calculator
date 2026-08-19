@@ -62,9 +62,13 @@ const CATEGORY_ALIASES = {
   'load': 'Mobile topup'
 };
 
-/** Only money actually used up counts as spending. */
+/**
+ * Both an expense and a move into savings take money out of the salary
+ * account, so both count as outgoings. A credit is the only kind that does
+ * not — it puts money in.
+ */
 const kindOf = (e) => e.kind || 'expense';
-const isSpend = (e) => kindOf(e) === 'expense';
+const isSpend = (e) => kindOf(e) !== 'credit';
 
 const SAVING_OPTION = '__saving__';
 
@@ -728,23 +732,17 @@ function renderMoves(moves) {
   card.hidden = !moves.length;
   if (!moves.length) return;
 
-  const credited = sum(moves.filter((e) => kindOf(e) === 'credit'));
-  const saved = sum(moves.filter((e) => kindOf(e) === 'saving'));
-  $('movesSummary').textContent = [
-    credited ? fmt(credited) + ' in' : '',
-    saved ? fmt(saved) + ' saved' : ''
-  ].filter(Boolean).join(' · ');
+  $('movesSummary').textContent = fmt(sum(moves)) + ' in';
 
   const box = $('movesList');
   box.innerHTML = '';
   for (const e of [...moves].sort((a, b) => b.date.localeCompare(a.date))) {
-    const saving = kindOf(e) === 'saving';
     const row = document.createElement('div');
     row.className = 'entry move-entry';
     row.innerHTML =
       '<div class="entry-main">' +
         '<div class="entry-top">' +
-          '<span class="entry-cat">' + (saving ? 'Moved to savings' : 'Credited') + '</span>' +
+          '<span class="entry-cat">Credited</span>' +
           '<span class="entry-date">' + prettyDate(e.date) + '</span>' +
         '</div>' +
         (e.note ? '<div class="entry-note">' + escapeHtml(e.note) + '</div>' : '') +
@@ -939,15 +937,14 @@ function salaryPools() {
   // or both
   const salaryTotal = salary.openingBalance + totalIncomeTillNow();
 
-  // money paid in on top of the salary, less anything moved out to savings
+  // purely what was paid in on top. Money moved to savings is counted as an
+  // outgoing instead, so netting it off here as well would subtract it twice.
   const credited = sum(state.expenses.filter(
     (e) => kindOf(e) === 'credit' && e.accountId === salary.id));
-  const movedOut = sum(state.expenses.filter(
-    (e) => kindOf(e) === 'saving' && e.accountId === salary.id));
 
   return {
     salaryTotal,
-    extraTotal: credited - movedOut,
+    extraTotal: credited,
     spent: spentFromAccount(salary.id),
     remaining: balanceOf(salary)
   };
