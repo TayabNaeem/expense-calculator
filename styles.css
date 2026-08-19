@@ -998,3 +998,11 @@ main { padding-bottom: 92px; }
 
 .move-entry { border-left: 3px solid var(--good); }
 .field[hidden] { display: none; }
+
+/* ---------- summary cards in the account row ---------- */
+.account-card.summary { cursor: default; }
+.account-card.summary:hover { transform: none; box-shadow: var(--shadow-sm); }
+.account-card.expense { border-left-color: var(--danger); }
+.account-card.expense .account-balance { color: var(--danger); }
+.account-card.remaining { border-left-color: var(--good); }
+.account-card.remaining .account-balance { color: var(--good); }

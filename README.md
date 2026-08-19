@@ -9,7 +9,9 @@ syncs to your own Firebase project and keeps working offline.
 Four pages, following the layout of the reference app.
 
 **Home**
-- What you have: every account with its balance and a combined net figure
+- What you have: every account with its balance and a combined net figure,
+  followed by two summary cards — total expense, and what is left of the
+  salary — each showing the all-time figure with the month on screen beneath
 - Your monthly expense: donut chart with a colour-coded legend
 - What you spent: enter an amount against a category and it is logged as an
   expense for today, straight off the salary account, with the month's running

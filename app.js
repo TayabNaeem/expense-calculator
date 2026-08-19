@@ -893,6 +893,46 @@ function renderAccounts() {
     card.addEventListener('click', () => openAccount(account.id));
     grid.appendChild(card);
   }
+
+  renderAccountSummary(grid);
+}
+
+/**
+ * Two read-only cards beside the accounts: everything spent, and what is left
+ * of the salary. Each leads with the all-time figure and carries the month on
+ * screen underneath, so both readings are there without a second card.
+ */
+function renderAccountSummary(grid) {
+  const monthKeyShown = monthKey(viewDate);
+  const monthLabel = MONTH_NAMES[viewDate.getMonth()].toLowerCase();
+
+  const spentAllTime = sum(state.expenses.filter((e) => isSpend(e) && !e.settled));
+  const spentThisMonth = sum(activeFor(monthKeyShown));
+
+  const salaryAllTime = totalIncomeTillNow();
+  const leftAllTime = salaryAllTime - spentAllTime;
+  const leftThisMonth = incomeFor(monthKeyShown) - spentThisMonth;
+
+  grid.appendChild(summaryCard(
+    'Total expense', spentAllTime,
+    fmt(spentThisMonth) + ' in ' + monthLabel, 'expense'));
+
+  grid.appendChild(summaryCard(
+    'Remaining from salary', leftAllTime,
+    fmt(leftThisMonth) + ' left in ' + monthLabel,
+    leftAllTime < 0 ? 'negative' : 'remaining'));
+}
+
+function summaryCard(title, amount, meta, tone) {
+  const card = document.createElement('div');
+  card.className = 'account-card summary ' + tone;
+  card.innerHTML =
+    '<span class="account-top">' +
+      '<span class="account-name">' + escapeHtml(title) + '</span>' +
+    '</span>' +
+    '<span class="account-balance">' + fmt(amount) + '</span>' +
+    '<span class="account-meta">' + escapeHtml(meta) + '</span>';
+  return card;
 }
 
 function refreshAccountPicker() {
@@ -1288,14 +1328,19 @@ document.querySelectorAll('.tab').forEach((tab) => {
   });
 });
 
-$('prevMonth').addEventListener('click', () => {
-  viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1);
+/** The summary cards quote the month on screen, so they move with it. */
+function goToMonth(date) {
+  viewDate = date;
   renderMonthly();
+  renderAccounts();
+}
+
+$('prevMonth').addEventListener('click', () => {
+  goToMonth(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1));
 });
 
 $('nextMonth').addEventListener('click', () => {
-  viewDate = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1);
-  renderMonthly();
+  goToMonth(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1));
 });
 
 $('sortSelect').addEventListener('change', () => renderMonthly());
@@ -1429,8 +1474,7 @@ $('recModal').addEventListener('click', (e) => {
 });
 
 $('todayBtn').addEventListener('click', () => {
-  viewDate = new Date();
-  renderMonthly();
+  goToMonth(new Date());
 });
 
 $('saveIncome').addEventListener('click', () => {
