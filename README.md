@@ -1,6 +1,8 @@
 # Expense Calculator
 
-A clean, no-signup expense tracker. Set your monthly income, tap a date on the calendar to log what you spent, and watch your remaining budget update instantly. Works for every month, past and future.
+A salary management tool. Track what sits in each bank, record what your salary
+gets spent on, move some of it into savings, and see where it went. Everything
+syncs to your own Firebase project and keeps working offline.
 
 ## Features
 
@@ -93,11 +95,12 @@ step 2, which is why getting those right matters.
 ### How data is stored
 
 ```
-users/{uid}                 -> { currency, defaultIncome, incomes, budgets,
+users/{uid}                 -> { currency, defaultIncome, incomes,
                                  accounts: [{ id, name, openingBalance, type }],
                                  displayName, photo }
 users/{uid}/expenses/{id}   -> { date, amount, category, note, createdAt,
-                                 settled, settledOn, accountId }
+                                 kind, accountId, toAccountId,
+                                 settled, settledOn }
 users/{uid}/receivables/{id}
                             -> { person, amount, note, date, createdAt,
                                  payments: [{ id, amount, date }] }
@@ -107,9 +110,12 @@ Payments live inside their receivable rather than in their own collection: a
 debt has a handful of repayments at most, and keeping them together means one
 document read and no join.
 
-Budgets and accounts sit on the user document rather than in collections of
-their own, for the same reason and one more: the existing rule already covers
-that document, so adding them needed no rules change.
+Accounts sit on the user document rather than in a collection of their own,
+for the same reason and one more: the existing rule already covers that
+document, so adding them needed no rules change.
+
+`kind` is one of `expense`, `credit` or `saving`. `toAccountId` is set only on
+a saving, naming where the money landed.
 
 ### Why the avatar is not in Firebase Storage
 
@@ -143,8 +149,8 @@ npx vercel --prod
 
 | File | Purpose |
 | --- | --- |
-| `index.html` | Page structure — tabs, calendar, stats, modal |
-| `styles.css` | All styling (dark theme, responsive) |
+| `index.html` | Page structure — the four pages, calendar, modals |
+| `styles.css` | All styling (light theme, responsive) |
 | `app.js` | State, calculations, rendering, cloud wiring |
 | `firebase.js` | Auth and Firestore sync |
 | `firestore.rules` | Security rules to paste into the console |
@@ -160,6 +166,10 @@ works if Firebase is unreachable:
   "currency": "PKR",
   "defaultIncome": 60000,
   "incomes": { "2026-08": 75000 },
+  "accounts": [
+    { "id": "a1", "name": "Meezan Bank", "openingBalance": 0, "type": "salary" },
+    { "id": "a2", "name": "Allied Bank", "openingBalance": 20000, "type": "savings" }
+  ],
   "expenses": [
     {
       "id": "1754900000000-a1b2c3d",
@@ -167,6 +177,8 @@ works if Firebase is unreachable:
       "amount": 1200,
       "category": "Petrol",
       "note": "bike fuel",
+      "kind": "expense",
+      "accountId": "a1",
       "createdAt": 1754900000000
     }
   ]
