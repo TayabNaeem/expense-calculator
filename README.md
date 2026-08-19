@@ -43,7 +43,10 @@ together — the salary card carries what is left on its second line.
 **Savings**
 - What is in the savings account
 - Salary received, spent, and kept, all time
-- Money owed to you, with part payments recorded against each person
+- Two ledgers: money owed to you, and loans you took. Both record the amount,
+  part payments against it, and what is left, so a loan can be paid off a bit
+  at a time or cleared in one go. Each payment can be removed again if you
+  record it wrong
 
 **Accounts and salary**
 
@@ -116,8 +119,8 @@ users/{uid}/expenses/{id}   -> { date, amount, category, note, createdAt,
                                  kind, accountId, toAccountId,
                                  settled, settledOn }
 users/{uid}/receivables/{id}
-                            -> { person, amount, note, date, createdAt,
-                                 payments: [{ id, amount, date }] }
+                            -> { person, amount, note, date, direction,
+                                 createdAt, payments: [{ id, amount, date }] }
 ```
 
 Payments live inside their receivable rather than in their own collection: a
@@ -130,6 +133,11 @@ document, so adding them needed no rules change.
 
 `kind` is one of `expense`, `credit` or `saving`. `toAccountId` is set only on
 a saving, naming where the money landed.
+
+`direction` is `in` for money owed to you or `out` for a loan you took. Both
+sides share one shape, since tracking part payments against a balance is the
+same problem either way. Records written before this existed have no
+`direction` and are read as `in`.
 
 ### Why the avatar is not in Firebase Storage
 

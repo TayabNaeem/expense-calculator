@@ -133,6 +133,7 @@ function normalize(data) {
     ...r,
     id: String(r.id),
     person: r.person || 'Unnamed',
+    direction: r.direction === 'out' ? 'out' : 'in',
     amount: Number(r.amount) || 0,
     note: r.note || '',
     createdAt: Number(r.createdAt) || 0,
@@ -148,6 +149,8 @@ function normalize(data) {
 /* ---------------- receivable maths ---------------- */
 
 const receivedOf = (r) => (r.payments || []).reduce((t, p) => t + (Number(p.amount) || 0), 0);
+/** 'in' is money owed to you; 'out' is a loan you took and still owe. */
+const isOwedToMe = (r) => (r.direction || 'in') === 'in';
 const remainingOf = (r) => Math.max(0, (Number(r.amount) || 0) - receivedOf(r));
 const isSettled = (r) => remainingOf(r) <= 0.005;
 
@@ -1083,7 +1086,7 @@ function renderSavings() {
   const income = pools.salaryTotal + pools.extraTotal || totalIncomeTillNow();
   const spent = sum(state.expenses.filter((e) => isSpend(e) && !e.settled));
   const kept = salaryAccount() ? pools.remaining : income - spent;
-  const owed = state.receivables.reduce((t, r) => t + remainingOf(r), 0);
+  const owed = state.receivables.filter(isOwedToMe).reduce((t, r) => t + remainingOf(r), 0);
 
   $('sIncome').textContent = fmt(income);
   $('sSpent').textContent = fmt(spent);
@@ -1091,6 +1094,9 @@ function renderSavings() {
   $('sKept').textContent = fmt(kept);
   $('sKept').classList.toggle('over', kept < 0);
   $('sOwed').textContent = fmt(owed);
+  $('sOwing').textContent = fmt(state.receivables
+    .filter((r) => !isOwedToMe(r))
+    .reduce((t, r) => t + remainingOf(r), 0));
 }
 
 /* ---------------- insights ---------------- */
@@ -1195,7 +1201,13 @@ function renderTrend(months) {
 /* ---------------- to-receive tab ---------------- */
 
 function renderReceivables() {
-  const list = state.receivables;
+  renderLedger('in', $('receivableList'), $('recCount'), $('recFilter'));
+  renderLedger('out', $('loanList'), $('loanCount'), $('loanFilter'));
+  renderReceivableTotals();
+}
+
+function renderReceivableTotals() {
+  const list = state.receivables.filter(isOwedToMe);
   const totalLent = list.reduce((t, r) => t + (Number(r.amount) || 0), 0);
   const totalPaid = list.reduce((t, r) => t + receivedOf(r), 0);
   const outstanding = list.reduce((t, r) => t + remainingOf(r), 0);
@@ -1206,7 +1218,11 @@ function renderReceivables() {
   $('rTotal').textContent = fmt(totalLent);
   $('rPeople').textContent = owing.size;
 
-  const filter = $('recFilter').value;
+}
+
+function renderLedger(direction, box, countPill, filterSelect) {
+  const list = state.receivables.filter((r) => (r.direction || 'in') === direction);
+  const filter = filterSelect.value;
   const shown = list.filter((r) =>
     filter === 'all' ? true : filter === 'settled' ? isSettled(r) : !isSettled(r));
 
@@ -1216,15 +1232,16 @@ function renderReceivables() {
     remainingOf(b) - remainingOf(a) ||
     b.createdAt - a.createdAt);
 
-  $('recCount').textContent = `${shown.length} ${shown.length === 1 ? 'entry' : 'entries'}`;
+  countPill.textContent = `${shown.length} ${shown.length === 1 ? 'entry' : 'entries'}`;
 
-  const box = $('receivableList');
   box.innerHTML = '';
   if (!shown.length) {
+    const owed = direction === 'in';
     box.innerHTML = `<p class="empty">${
-      filter === 'settled' ? 'Nothing settled yet.'
-      : filter === 'all' ? 'No one owes you anything yet. Add an entry above.'
-      : 'Nothing outstanding — everyone has paid you back.'}</p>`;
+      filter === 'settled' ? (owed ? 'Nothing settled yet.' : 'Nothing repaid yet.')
+      : filter === 'all' ? (owed ? 'No one owes you anything yet.' : 'You have not recorded any loans you took.')
+      : (owed ? 'Nothing outstanding — everyone has paid you back.'
+              : 'Nothing outstanding — you have repaid everything.')}</p>`;
     return;
   }
   for (const r of shown) box.appendChild(receivableRow(r));
@@ -1236,9 +1253,10 @@ function receivableRow(r) {
   const settled = isSettled(r);
   const pct = r.amount > 0 ? (received / r.amount) * 100 : 0;
 
+  const owed = isOwedToMe(r);
   const row = document.createElement('button');
   row.type = 'button';
-  row.className = 'rec-row' + (settled ? ' settled' : '');
+  row.className = 'rec-row' + (settled ? ' settled' : '') + (owed ? '' : ' owing');
   row.innerHTML = `
     <span class="rec-avatar">${escapeHtml(r.person.trim().charAt(0).toUpperCase() || '?')}</span>
     <span class="rec-main">
@@ -1248,11 +1266,11 @@ function receivableRow(r) {
       </span>
       ${r.note ? `<span class="rec-note-line">${escapeHtml(r.note)}</span>` : ''}
       <span class="bar-track"><span class="bar-fill good" style="width:${Math.min(pct, 100)}%"></span></span>
-      <span class="rec-meta">${fmt(received)} received of ${fmt(r.amount)}${r.date ? ` · given ${prettyDate(r.date)}` : ''}</span>
+      <span class="rec-meta">${fmt(received)} ${owed ? 'received' : 'repaid'} of ${fmt(r.amount)}${r.date ? ` · ${owed ? 'given' : 'taken'} ${prettyDate(r.date)}` : ''}</span>
     </span>
     <span class="rec-amount">
       <strong class="${settled ? 'good-text' : 'danger-text'}">${settled ? fmt(0) : fmt(remaining)}</strong>
-      <small>${settled ? 'cleared' : 'remaining'}</small>
+      <small>${settled ? 'cleared' : owed ? 'to collect' : 'to repay'}</small>
     </span>`;
   row.addEventListener('click', () => openReceivable(r.id));
   return row;
@@ -1285,7 +1303,8 @@ function renderReceivableModal() {
   const remaining = remainingOf(r);
   const pct = r.amount > 0 ? Math.min((received / r.amount) * 100, 100) : 0;
 
-  $('recModalTitle').textContent = r.person;
+  const owed = isOwedToMe(r);
+  $('recModalTitle').textContent = r.person + (owed ? '' : ' — loan you took');
   $('recModalNote').textContent = r.note || '';
   $('recModalNote').hidden = !r.note;
   $('recOriginal').textContent = fmt(r.amount);
@@ -1293,8 +1312,16 @@ function renderReceivableModal() {
   $('recRemaining').textContent = fmt(remaining);
   $('recProgress').style.width = pct + '%';
   $('recProgressText').textContent = isSettled(r)
-    ? 'Fully received — nothing left to collect.'
-    : `${pct.toFixed(1)}% received · ${fmt(remaining)} still owed`;
+    ? (owed ? 'Fully received — nothing left to collect.' : 'Fully repaid — nothing left to pay.')
+    : `${pct.toFixed(1)}% ${owed ? 'received' : 'repaid'} · ${fmt(remaining)} ${owed ? 'still owed to you' : 'still to repay'}`;
+
+  $('recPaidLabel').textContent = owed ? 'Received' : 'Repaid';
+  $('payAmountLabel').textContent = owed ? 'Amount received' : 'Amount repaid';
+  $('payDateLabel').textContent = owed ? 'Received on' : 'Repaid on';
+  $('paymentForm').querySelector('button[type="submit"]').textContent =
+    owed ? 'Record payment' : 'Record repayment';
+  $('settleBtn').textContent = owed ? 'Mark fully received' : 'Mark fully repaid';
+  $('paymentHistoryTitle').textContent = owed ? 'Payment history' : 'Repayment history';
 
   $('paymentForm').hidden = isSettled(r);
 
@@ -1313,7 +1340,7 @@ function renderReceivableModal() {
     item.innerHTML = `
       <div class="entry-main">
         <div class="entry-top">
-          <span class="entry-cat">Received</span>
+          <span class="entry-cat">${isOwedToMe(r) ? 'Received' : 'Repaid'}</span>
           <span class="entry-date">${pay.date ? prettyDate(pay.date) : ''}</span>
         </div>
       </div>
@@ -1332,13 +1359,14 @@ function saveReceivable(receivable) {
   push(() => cloudSaveReceivable(receivable));
 }
 
-function addReceivable(person, amount, date, note) {
+function addReceivable(person, amount, date, note, direction = 'in') {
   const receivable = {
     id: newId(),
     person: person.trim(),
     amount: Number(amount),
     note: note.trim(),
     date,
+    direction,
     createdAt: Date.now(),
     payments: []
   };
@@ -1414,6 +1442,13 @@ $('sortSelect').addEventListener('change', () => renderMonthly());
 $('groupSelect').addEventListener('change', () => renderMonthly());
 
 $('recFilter').addEventListener('change', () => renderReceivables());
+$('loanFilter').addEventListener('change', () => renderReceivables());
+
+$('recDirection').addEventListener('change', () => {
+  const owed = $('recDirection').value === 'in';
+  $('recDateLabel').textContent = owed ? 'Date given' : 'Date taken';
+  $('recPerson').placeholder = owed ? 'e.g. Ali' : 'e.g. Ali, or the bank';
+});
 
 $('receivableForm').addEventListener('submit', (e) => {
   e.preventDefault();
@@ -1422,7 +1457,8 @@ $('receivableForm').addEventListener('submit', (e) => {
   if (!(amount > 0)) return alert('Please enter an amount greater than 0.');
   if (!$('recDate').value) return alert('Please pick the date you gave it.');
 
-  addReceivable($('recPerson').value, amount, $('recDate').value, $('recNote').value);
+  addReceivable($('recPerson').value, amount, $('recDate').value, $('recNote').value,
+                $('recDirection').value);
   e.target.reset();
   $('recDate').value = dateKey(new Date());
   $('recPerson').focus();
@@ -1437,7 +1473,7 @@ $('paymentForm').addEventListener('submit', (e) => {
 
   const remaining = remainingOf(r);
   if (amount - remaining > 0.005 &&
-      !confirm(`That is more than the ${fmt(remaining)} still owed. Record it anyway?`)) return;
+      !confirm(`That is more than the ${fmt(remaining)} outstanding. Record it anyway?`)) return;
 
   addPayment(amount, $('payDate').value || dateKey(new Date()));
   $('payAmount').value = '';
@@ -1448,7 +1484,7 @@ $('settleBtn').addEventListener('click', () => {
   if (!r) return;
   const remaining = remainingOf(r);
   if (remaining <= 0) return;
-  if (!confirm(`Record the remaining ${fmt(remaining)} as received?`)) return;
+  if (!confirm(`Record the remaining ${fmt(remaining)} as ${isOwedToMe(r) ? 'received' : 'repaid'}?`)) return;
   addPayment(remaining, $('payDate').value || dateKey(new Date()));
 });
 

@@ -1011,3 +1011,10 @@ main { padding-bottom: 92px; }
 .account-card.extra .account-balance { color: var(--accent-2); }
 .account-card.drained { border-left-color: var(--warn); }
 .account-card.drained .account-balance { color: var(--warn); }
+
+/* ---------- loans you owe ---------- */
+.rec-row.owing { border-left: 3px solid var(--danger); }
+.rec-row.owing .rec-avatar { background: linear-gradient(140deg, var(--danger), #e8737f); }
+.rec-row.owing .bar-fill { background: linear-gradient(90deg, var(--danger), #e8737f); }
+.rec-row.owing.settled .rec-avatar { background: linear-gradient(140deg, var(--good), #1fb37f); }
+.receivable-form .field.wide { grid-column: 1 / -1; }

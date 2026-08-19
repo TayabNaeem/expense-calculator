@@ -453,6 +453,10 @@
         <span class="stat-label">Still owed to you</span>
         <span class="stat-value" id="sOwed">—</span>
       </div>
+      <div class="stat">
+        <span class="stat-label">You still owe</span>
+        <span class="stat-value danger" id="sOwing">—</span>
+      </div>
     </div>
 
     <h2 class="section-heading">Money owed to you</h2>
@@ -476,8 +480,15 @@
     </div>
 
     <div class="income-card">
-      <h3>Add money someone owes you</h3>
+      <h3>Add a loan</h3>
       <form id="receivableForm" class="receivable-form">
+        <div class="field wide">
+          <label for="recDirection">This is</label>
+          <select id="recDirection">
+            <option value="in">Money someone owes me</option>
+            <option value="out">A loan I took — I owe it</option>
+          </select>
+        </div>
         <div class="field">
           <label for="recPerson">Person</label>
           <input type="text" id="recPerson" maxlength="60" placeholder="e.g. Ali" required />
@@ -487,7 +498,7 @@
           <input type="number" id="recAmount" min="0" step="any" placeholder="0" inputmode="decimal" required />
         </div>
         <div class="field">
-          <label for="recDate">Date given</label>
+          <label for="recDate" id="recDateLabel">Date given</label>
           <input type="date" id="recDate" required />
         </div>
         <div class="field wide">
@@ -511,6 +522,23 @@
         </div>
       </div>
       <div id="receivableList" class="entries"></div>
+    </div>
+
+    <h2 class="section-heading">Loans you took</h2>
+
+    <div class="list-card">
+      <div class="list-head">
+        <h3>Still to repay</h3>
+        <div class="list-tools">
+          <select id="loanFilter" class="mini-select" aria-label="Filter loans">
+            <option value="open">Not repaid yet</option>
+            <option value="settled">Repaid</option>
+            <option value="all">Show all</option>
+          </select>
+          <span class="pill" id="loanCount">0 entries</span>
+        </div>
+      </div>
+      <div id="loanList" class="entries"></div>
     </div>
   
   </section>
@@ -658,7 +686,7 @@
 
     <div class="rec-summary">
       <div><span class="stat-label">Original</span><strong id="recOriginal">—</strong></div>
-      <div><span class="stat-label">Received</span><strong class="good-text" id="recPaid">—</strong></div>
+      <div><span class="stat-label" id="recPaidLabel">Received</span><strong class="good-text" id="recPaid">—</strong></div>
       <div><span class="stat-label">Remaining</span><strong class="danger-text" id="recRemaining">—</strong></div>
     </div>
 
@@ -667,11 +695,11 @@
 
     <form id="paymentForm" class="payment-form">
       <div class="field">
-        <label for="payAmount">Amount received</label>
+        <label for="payAmount" id="payAmountLabel">Amount received</label>
         <input type="number" id="payAmount" min="0" step="any" placeholder="0" inputmode="decimal" required />
       </div>
       <div class="field">
-        <label for="payDate">Received on</label>
+        <label for="payDate" id="payDateLabel">Received on</label>
         <input type="date" id="payDate" required />
       </div>
       <button type="submit" class="primary-btn wide">Record payment</button>
@@ -679,7 +707,7 @@
     </form>
 
     <div class="day-entries">
-      <h4>Payment history</h4>
+      <h4 id="paymentHistoryTitle">Payment history</h4>
       <div id="paymentList" class="entries"></div>
     </div>
 
