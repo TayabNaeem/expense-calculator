@@ -10,8 +10,13 @@ Four pages, following the layout of the reference app.
 
 **Home**
 - What you have: every account with its balance and a combined net figure,
-  followed by two summary cards — total expense, and what is left of the
-  salary — each showing the all-time figure with the month on screen beneath
+  followed by three summary cards — total expense, what is left of the salary,
+  and what is left of anything credited on top
+
+Spending draws the salary down first. Only once that reaches zero does it
+start eating into the extra credited, so the salary figure stops at zero
+rather than running negative while money is genuinely still in the account.
+The two always add up to the salary account's balance.
 - Your monthly expense: donut chart with a colour-coded legend
 - What you spent: enter an amount against a category and it is logged as an
   expense for today, straight off the salary account, with the month's running

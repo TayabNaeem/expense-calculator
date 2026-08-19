@@ -1006,3 +1006,8 @@ main { padding-bottom: 92px; }
 .account-card.expense .account-balance { color: var(--danger); }
 .account-card.remaining { border-left-color: var(--good); }
 .account-card.remaining .account-balance { color: var(--good); }
+
+.account-card.extra { border-left-color: var(--accent-2); }
+.account-card.extra .account-balance { color: var(--accent-2); }
+.account-card.drained { border-left-color: var(--warn); }
+.account-card.drained .account-balance { color: var(--warn); }
